@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "title": "消息处理与校验",
+  "description": "Accept a message envelope, validate its fields, and either publish a processed result or record a rejection. This is a generic planning example, not an executable workflow.",
+  "constraints": "## Acceptance criteria\n- A valid message follows the processing path and publishes a result with the original message ID.\n- An invalid message follows the labelled rejection branch and never reaches processing.\n- Completion records either `published` or `rejected`; these outcomes must remain distinguishable.\n- Do not log message bodies or secrets. Transport retries and external-service outages are outside this example's scope.",
+  "nodes": [
+    {
+      "id": "receive-message",
+      "type": "start",
+      "position": { "x": 100, "y": 40 },
+      "data": {
+        "label": "接收消息",
+        "notes": "The flow begins when the application receives one message envelope.\n\nInput: `messageId`, `body`, and optional `category`. Keep the original message ID for correlation. All example values are synthetic.\n\nOutput: an envelope ready for normalization; receipt alone does not mean successful processing.",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "normalize-fields",
+      "type": "step",
+      "position": { "x": 100, "y": 205 },
+      "data": {
+        "label": "整理输入字段",
+        "notes": "Trim surrounding whitespace from string fields. Do not invent a missing ID or coerce non-string values. A missing category defaults to `general`.\n\n| Field | Rule |\n| --- | --- |\n| messageId | Required string |\n| body | Required string |\n| category | Optional string |\n\nExample normalized envelope:\n\n```json\n{\n  \"messageId\": \"msg-demo-001\",\n  \"body\": \"Hello\",\n  \"category\": \"general\"\n}\n```",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "validate-message",
+      "type": "decision",
+      "position": { "x": 100, "y": 365 },
+      "data": {
+        "label": "消息是否有效？",
+        "notes": "Require a nonblank string `messageId` and `body`. If supplied, `category` must also be a nonblank string after trimming.\n\n- `valid`: every required check passes.\n- `invalid`: at least one field violates a rule.\n\nOutput on failure: field names and stable reason codes, without copying the message body into diagnostics.",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "process-message",
+      "type": "step",
+      "position": { "x": 100, "y": 570 },
+      "data": {
+        "label": "处理消息",
+        "notes": "Apply the application's deterministic message transformation to the validated envelope. Preserve `messageId` and `category` in the result.\n\n```text\nresult = transform(validated.body)\noutput = {messageId, category, result}\n```\n\nAcceptance: invalid envelopes never enter this step. Transformation details belong to the real task's requirements, not this generic example.",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "publish-result",
+      "type": "step",
+      "position": { "x": 100, "y": 735 },
+      "data": {
+        "label": "发布处理结果",
+        "notes": "Make the processed result available to the intended consumer with its original correlation ID.\n\n| Output | Meaning |\n| --- | --- |\n| messageId | Original envelope ID |\n| status | `published` |\n| result | Transformation output |\n\nFor this bounded example, assume the destination is available. A production plan must separately define delivery failures and deduplication if they are in scope.",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "record-rejection",
+      "type": "step",
+      "position": { "x": 490, "y": 570 },
+      "data": {
+        "label": "记录拒绝原因",
+        "notes": "Return a rejection outcome with field-level reason codes. Include the original message ID only if it is a valid string. Do not publish a processed result or include the rejected body in logs.\n\n```json\n{\n  \"status\": \"rejected\",\n  \"reasons\": [\n    \"body.required\"\n  ]\n}\n```\n\nThis branch ends the current attempt; there is no implicit retry.",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "finish-attempt",
+      "type": "end",
+      "position": { "x": 100, "y": 900 },
+      "data": {
+        "label": "返回本次结果",
+        "notes": "The attempt has a terminal outcome: `published` for the valid path or `rejected` for the invalid path.\n\nAcceptance: the caller can distinguish these outcomes, and a rejection cannot be mistaken for successful processing. Any future resubmission starts a new attempt at Receive message.",
+        "executor": "program",
+        "expanded": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "receive-to-normalize",
+      "source": "receive-message",
+      "target": "normalize-fields",
+      "label": "",
+      "sourceHandle": "bottom",
+      "targetHandle": "top"
+    },
+    {
+      "id": "normalize-to-validate",
+      "source": "normalize-fields",
+      "target": "validate-message",
+      "label": "",
+      "sourceHandle": "bottom",
+      "targetHandle": "top"
+    },
+    {
+      "id": "valid-to-process",
+      "source": "validate-message",
+      "target": "process-message",
+      "label": "有效",
+      "sourceHandle": "bottom",
+      "targetHandle": "top"
+    },
+    {
+      "id": "invalid-to-reject",
+      "source": "validate-message",
+      "target": "record-rejection",
+      "label": "无效，拒绝处理",
+      "sourceHandle": "right",
+      "targetHandle": "top"
+    },
+    {
+      "id": "process-to-publish",
+      "source": "process-message",
+      "target": "publish-result",
+      "label": "",
+      "sourceHandle": "bottom",
+      "targetHandle": "top"
+    },
+    {
+      "id": "publish-to-finish",
+      "source": "publish-result",
+      "target": "finish-attempt",
+      "label": "已发布",
+      "sourceHandle": "bottom",
+      "targetHandle": "top"
+    },
+    {
+      "id": "reject-to-finish",
+      "source": "record-rejection",
+      "target": "finish-attempt",
+      "label": "已拒绝",
+      "sourceHandle": "bottom",
+      "targetHandle": "right-in"
+    }
+  ]
+}

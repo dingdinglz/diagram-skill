@@ -1,0 +1,34 @@
+{
+  "name": "diagram-plan",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run && python3 -m unittest discover -s tests -v",
+    "test:web": "vitest run",
+    "test:python": "python3 -m unittest discover -s tests -v",
+    "test:browser": "python3 tools/browser_smoke.py",
+    "test:release": "python3 tools/smoke_release.py",
+    "release": "npm run build && python3 tools/package_skill.py"
+  },
+  "dependencies": {
+    "@dagrejs/dagre": "^3.1.1",
+    "@xyflow/react": "^12.12.0",
+    "html-to-image": "^1.11.13",
+    "lucide-react": "^0.468.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.3.4",
+    "vitest": "^4.0.0"
+  }
+}

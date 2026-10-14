@@ -1,0 +1,7 @@
+node_modules/
+.diagram-skill/
+__pycache__/
+*.pyc
+.DS_Store
+release/
+.test-artifacts/
