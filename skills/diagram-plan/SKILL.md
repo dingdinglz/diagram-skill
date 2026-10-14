@@ -1,5 +1,6 @@
 ---
 name: diagram-plan
+license: MIT
 description: Visually plan a task's core behavior in an editable local browser flow before coding. Use only when the user explicitly invokes diagram-plan or asks to use this skill to draw, review, revise, and approve a plan before implementation.
 disable-model-invocation: true
 compatibility: macOS or Linux, Python 3.8+, and a local modern desktop browser. POSIX file locking is required; native Windows is not supported. Bundled web assets require no Node.js, MCP server, network service, or API key at runtime.

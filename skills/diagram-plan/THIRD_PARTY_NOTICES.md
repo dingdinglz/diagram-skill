@@ -1,6 +1,6 @@
 # Third-party notices
 
-Bundled JavaScript dependencies and their transitive dependencies. Generated from the installed lockfile; dependency license statements do not set the license of this project.
+Bundled JavaScript dependencies and their transitive dependencies. Project code is covered by the accompanying LICENSE. Dependencies retain their own licenses, reproduced below.
 
 
 ## @dagrejs/dagre@3.1.1

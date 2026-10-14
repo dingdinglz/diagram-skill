@@ -15,7 +15,7 @@ def third_party_notices():
         ['npm', 'ls', '--omit=dev', '--parseable', '--all'], cwd=str(ROOT), universal_newlines=True
     ).splitlines()
     sections = ['# Third-party notices\n\nBundled JavaScript dependencies and their transitive dependencies. '
-                'Generated from the installed lockfile; dependency license statements do not set the license of this project.\n']
+                'Project code is covered by the accompanying LICENSE. Dependencies retain their own licenses, reproduced below.\n']
     missing = []
     for path in sorted(set(packages)):
         directory = Path(path)
@@ -42,6 +42,10 @@ def main():
     for relative in required:
         if not (SKILL / relative).is_file():
             raise SystemExit('Missing {}. Run npm run build first.'.format(relative))
+    license_file = ROOT / 'LICENSE'
+    if not license_file.is_file():
+        raise SystemExit('Missing project LICENSE; cannot package the skill.')
+    (SKILL / 'LICENSE').write_bytes(license_file.read_bytes())
     third_party_notices()
     version = json.loads((ROOT / 'package.json').read_text())['version']
     output = ROOT / 'release'

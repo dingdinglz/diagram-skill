@@ -66,3 +66,7 @@ python3 skills/diagram-plan/scripts/diagram.py create \
 - [图的数据格式](skills/diagram-plan/references/graph-schema.md)与[绘图规范](skills/diagram-plan/references/design.md)
 
 画布基于 [React Flow](https://reactflow.dev/)，绘图规范参考了 [diagram-design](https://github.com/cathrynlavery/diagram-design)。
+
+## 许可证
+
+采用 [MIT 许可证](LICENSE)。第三方依赖保留各自的许可证，见[第三方许可声明](skills/diagram-plan/THIRD_PARTY_NOTICES.md)。

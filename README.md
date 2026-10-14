@@ -66,3 +66,7 @@ The canvas runs on localhost and stores plans under `.diagram-skill/` in your pr
 - [Graph format](skills/diagram-plan/references/graph-schema.md) and [diagram guidelines](skills/diagram-plan/references/design.md)
 
 The canvas uses [React Flow](https://reactflow.dev/). The diagram guidelines draw on [diagram-design](https://github.com/cathrynlavery/diagram-design).
+
+## License
+
+[MIT](LICENSE). Bundled dependencies retain their own licenses; see [third-party notices](skills/diagram-plan/THIRD_PARTY_NOTICES.md).

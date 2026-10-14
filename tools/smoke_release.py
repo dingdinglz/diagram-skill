@@ -25,6 +25,7 @@ def main():
             assert not any('__pycache__' in name or 'node_modules' in name or '.diagram-skill/' in name for name in names)
             bundle.extractall(str(base))
         skill = base / 'diagram-plan'
+        assert (skill / 'LICENSE').read_bytes() == (ROOT / 'LICENSE').read_bytes(), 'Release license must match the project license'
         project = base / 'workspace'
         project.mkdir()
         script = skill / 'scripts/diagram.py'

@@ -59,4 +59,4 @@ Use synthetic data in screenshots and examples. Keep local task state, browser s
 
 The editor uses React Flow, Dagre, and html-to-image. Diagram conventions are informed by [diagram-design](https://github.com/cathrynlavery/diagram-design).
 
-`skills/diagram-plan/THIRD_PARTY_NOTICES.md` is generated from installed dependencies during packaging. Dependency licenses do not establish a license for this repository's own code.
+The project is licensed under [MIT](LICENSE). Packaging copies the root `LICENSE` into the skill directory and regenerates `skills/diagram-plan/THIRD_PARTY_NOTICES.md` from the bundled dependencies, which retain their own licenses.
