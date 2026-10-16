@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, MiniMap, useReactFlow, getViewportForBounds, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, MiniMap, ViewportPortal, useReactFlow, getViewportForBounds, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
 import { ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, Check, CheckCheck, ChevronRight, CircleDot, Clock3, Code2, Diamond, FileJson, Flag, GitBranch, History, Layers2, LayoutGrid, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Square, Trash2, Undo2, X, AlertCircle, Pause, LockKeyhole, Image, FileText, FolderOpen } from 'lucide-react';
 import FlowNode, { LoopArea, type CanvasNode } from './FlowNode';
 import { FlowEdge, type RoutedEdge } from './FlowEdge';
 import { moveItem, groupsOf, upgradeGraph, NODE_WIDTH, NODE_HEIGHT, type ViewScope } from './views';
 import { createRootScene, nodePorts } from './geometry';
+import { closestOutlinePoint, containsRounded, outlineAnchor, projectAnchor, type Point } from './anchors';
 import { NodeInspector } from './NodeInspector';
 import { Markdown } from './Markdown';
 import { useWorkspace } from './useWorkspace';
 import { api, downloadArtifact, hasToken } from './api';
-import { approvalIssues, createNode, graphWarnings, layoutGraph, newId, removeNodes, removeEdges } from './model';
+import { approvalIssues, createNode, graphWarnings, layoutGraph, newId, removeNodes, removeEdges, reconnectGraphEdge } from './model';
 import type { Graph, GraphNode, HistoricalVersion, NodeKind, Executor } from './types';
 import { KIND_LABELS, EXECUTOR_LABELS, STATUS_LABELS, VERSION_LABELS } from './types';
 
@@ -17,6 +18,8 @@ const nodeTypes = { start: FlowNode, step: FlowNode, decision: FlowNode, end: Fl
 const edgeTypes = { routed: FlowEdge };
 const palette = [{ type: 'start', Icon: CircleDot, hint: '入口或触发' }, { type: 'step', Icon: Square, hint: '一个明确动作' }, { type: 'decision', Icon: Diamond, hint: '标明分支条件' }, { type: 'end', Icon: Flag, hint: '结果或终点' }] as const;
 const time = (iso: string) => new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+type ConnectionEnd = { nodeId: string; anchor: Point };
+type ConnectionDrag = { pointerId: number; initialClient: Point; fixed: Point; pointer: Point; from: ConnectionEnd; edgeId?: string; endpoint?: 'source' | 'target'; candidate?: ConnectionEnd };
 
 function Workspace() {
   const ws = useWorkspace();
@@ -34,6 +37,9 @@ function Workspace() {
   const [feedback, setFeedback] = useState('');
   const [versionLoading, setVersionLoading] = useState(false);
   const [nodeMeasurements, setNodeMeasurements] = useState<Record<string, { width: number; height: number }>>({});
+  const [connectionDrag, setConnectionDrag] = useState<ConnectionDrag | null>(null);
+  const connectionDragRef = useRef<ConnectionDrag | null>(null);
+  const suppressCanvasClick = useRef(false);
   const displayGraph = historical?.graph || ws.graph;
   const editable = ws.editable && !historical;
   const selectedNode = displayGraph.nodes.find(n => n.id === selectedNodeId);
@@ -64,6 +70,70 @@ function Workspace() {
   const openDetails = useCallback((id: string, scope?: ViewScope) => {
     setSelectedNodeId(id); setSelectedEdgeId(null); setDetailScope(scope); setPanel('details'); setPanelOpen(true);
   }, []);
+  const setConnectionPreview = useCallback((next: ConnectionDrag | null) => {
+    connectionDragRef.current = next; setConnectionDrag(next);
+  }, []);
+  useEffect(() => { setConnectionPreview(null); }, [ws.task?.id, historical?.id, editable, setConnectionPreview]);
+  const beginOutlineConnection = useCallback((event: ReactPointerEvent<SVGRectElement>, nodeId: string) => {
+    if (!editable || event.button !== 0 || !scene.rects[nodeId]) return;
+    event.preventDefault(); event.stopPropagation();
+    const pointer = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const anchor = outlineAnchor(scene.rects[nodeId], pointer);
+    setConnectionPreview({ pointerId: event.pointerId, initialClient: { x: event.clientX, y: event.clientY }, fixed: projectAnchor(scene.rects[nodeId], anchor), pointer, from: { nodeId, anchor } });
+  }, [editable, scene.rects, flow, setConnectionPreview]);
+  const beginEndpointMove = (event: ReactPointerEvent<SVGCircleElement>, endpoint: 'source' | 'target') => {
+    const geometry = scene.edges.find(e => e.edge.id === selectedEdgeId);
+    if (!editable || event.button !== 0 || !geometry) return;
+    event.preventDefault(); event.stopPropagation();
+    const nodeId = geometry.edge[endpoint], anchor = outlineAnchor(scene.rects[nodeId], geometry[endpoint]);
+    setConnectionPreview({ pointerId: event.pointerId, initialClient: { x: event.clientX, y: event.clientY }, fixed: geometry[endpoint === 'source' ? 'target' : 'source'], pointer: geometry[endpoint], from: { nodeId, anchor }, edgeId: geometry.edge.id, endpoint });
+  };
+  useEffect(() => {
+    const candidateAt = (point: Point): ConnectionEnd | undefined => {
+      const candidates = scene.view.nodes.filter(n => !n.groupId && ws.graph.nodes.some(real => real.id === n.id)).map(n => {
+        const rect = scene.rects[n.id], projected = closestOutlinePoint(rect, point);
+        return { nodeId: n.id, anchor: outlineAnchor(rect, point), distance: Math.hypot(projected.x - point.x, projected.y - point.y), inside: containsRounded(rect, point) };
+      }).filter(candidate => candidate.inside || candidate.distance <= 14 / flow.getZoom()).sort((a, b) => a.distance - b.distance);
+      return candidates[0];
+    };
+    const move = (event: PointerEvent) => {
+      const drag = connectionDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      event.preventDefault();
+      const pointer = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      setConnectionPreview({ ...drag, pointer, candidate: candidateAt(pointer) });
+    };
+    const end = (event: PointerEvent) => {
+      const drag = connectionDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const moved = Math.hypot(event.clientX - drag.initialClient.x, event.clientY - drag.initialClient.y) >= 4;
+      const candidate = candidateAt(flow.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+      setConnectionPreview(null);
+      if (moved) { suppressCanvasClick.current = true; window.setTimeout(() => { suppressCanvasClick.current = false; }, 0); }
+      if (!moved || !candidate || !editable) return;
+      const graph = upgradeGraph(ws.graph);
+      let edgeId = drag.edgeId;
+      if (edgeId && drag.endpoint) {
+        const endpoint = drag.endpoint;
+        ws.edit(reconnectGraphEdge(graph, edgeId, endpoint, candidate.nodeId, candidate.anchor));
+      } else {
+        edgeId = newId('edge');
+        ws.edit({ ...graph, edges: [...graph.edges, { id: edgeId, source: drag.from.nodeId, target: candidate.nodeId, sourceAnchor: drag.from.anchor, targetAnchor: candidate.anchor, sourceHandle: 'bottom', targetHandle: 'top', label: '', role: 'main' }] });
+      }
+      setSelectedEdgeId(edgeId); setSelectedNodeId(null); setPanel('details'); setPanelOpen(true);
+    };
+    const cancel = () => setConnectionPreview(null);
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') cancel(); };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', key);
+    window.addEventListener('blur', cancel);
+    return () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', cancel); window.removeEventListener('keydown', key); window.removeEventListener('blur', cancel);
+    };
+  }, [editable, scene, ws.graph, ws.edit, flow, setConnectionPreview]);
   const nodes = useMemo<CanvasNode[]>(() => [
     ...scene.loops.map(loop => ({ id: `loop-area:${loop.id}`, type: 'loop-area' as const,
       position: { x: loop.center.x-loop.radius-48, y: loop.center.y-loop.radius-48 },
@@ -72,9 +142,9 @@ function Workspace() {
       data: { label: loop.label, notes: '', executor: 'program' as const, expanded: false, loopRadius: loop.radius+48, onGroup: () => openDetails(loop.id, {groupId:loop.id}) } })),
     ...view.nodes.map(node => ({ ...node, width: NODE_WIDTH, height: NODE_HEIGHT, measured: nodeMeasurements[node.id], selected: node.id === selectedNodeId, connectable: editable && !node.groupId,
       data: { ...node.data, groupId: node.groupId, ports: nodePorts(node, scene), branchCount: view.branches[node.id]?.length || 0, exceptionsOnly: view.branches[node.id]?.every(b=>b.exception),
-        onBranches: () => openDetails(node.id, {branchEdgeId:view.branches[node.id]?.[0]?.edgeId}),
+        onOutlineStart: beginOutlineConnection, onBranches: () => openDetails(node.id, {branchEdgeId:view.branches[node.id]?.[0]?.edgeId}),
         onGroup: node.groupId ? () => openDetails(node.id, {groupId:node.groupId}) : undefined } }))
-  ], [view, scene, selectedNodeId, nodeMeasurements, editable, openDetails]);
+  ], [view, scene, selectedNodeId, nodeMeasurements, editable, openDetails, beginOutlineConnection]);
   const edges = useMemo<RoutedEdge[]>(() => scene.edges.map(geometry => ({ ...geometry.edge, type: 'routed',
     sourceHandle: `out:${geometry.edge.id}`, targetHandle: `in:${geometry.edge.id}`, selected: geometry.edge.id === selectedEdgeId,
     data: { geometry } })), [scene, selectedEdgeId]);
@@ -105,7 +175,10 @@ function Workspace() {
   }, [editable, ws.graph, ws.edit]);
   const connect = useCallback((connection: Connection) => {
     if (!editable || !connection.source || !connection.target || !ws.graph.nodes.some(n => n.id === connection.source) || !ws.graph.nodes.some(n => n.id === connection.target)) return;
-    const edge = { id: newId('edge'), ...connection, label: '', ...(ws.graph.schemaVersion === 2 ? { role: 'main' as const } : {}) };
+    const edge = { id: newId('edge'), source: connection.source, target: connection.target,
+      sourceHandle: ['bottom', 'left', 'right'].includes(connection.sourceHandle || '') ? connection.sourceHandle : 'bottom',
+      targetHandle: ['top', 'left-in', 'right-in'].includes(connection.targetHandle || '') ? connection.targetHandle : 'top',
+      label: '', ...(ws.graph.schemaVersion === 2 ? { role: 'main' as const } : {}) };
     ws.edit({ ...ws.graph, edges: [...ws.graph.edges, edge] });
     setSelectedEdgeId(edge.id); setSelectedNodeId(null); setPanel('details'); setPanelOpen(true);
   }, [editable, ws.graph, ws.edit]);
@@ -170,7 +243,7 @@ function Workspace() {
       <div className="node-palette">
         <div className="sidebar-section-label">绘图工具 <MousePointer2 size={12} /></div>
         {palette.map(({ type, Icon, hint }) => <button key={type} className="palette-button" disabled={!editable} onClick={() => addNode(type)} aria-label={`添加${KIND_LABELS[type]}`}><span className={`palette-icon palette-${type}`}><Icon size={17} /></span><span>{KIND_LABELS[type]}<small>{hint}</small></span><Plus size={13} /></button>)}
-        <p className="palette-tip">从节点的连接点拖出箭头。<br />点击节点或连线，编辑含义。</p>
+        <p className="palette-tip">从卡片边缘任意位置拖出箭头。<br />选中连线后，可拖动两端。</p>
       </div>
       <div className="sidebar-footer"><ShieldCheck size={15} /><span>只在你的电脑上<small>本地文件 · 无模型密钥</small></span></div>
     </aside>
@@ -206,14 +279,28 @@ function Workspace() {
           </div>}
           <ReactFlow<CanvasNode, RoutedEdge> key={`${ws.task?.id || 'empty'}-${historical?.id || 'current'}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect}
-            onNodeClick={(_, node) => { if (node.type !== 'loop-area') openDetails(node.id); }}
+            onNodeClick={(_, node) => { if (!suppressCanvasClick.current && node.type !== 'loop-area') openDetails(node.id); }}
             onNodeDoubleClick={(_, node) => { if (node.type !== 'loop-area') openDetails(node.id); }}
             onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); setPanel('details'); setPanelOpen(true); }}
-            onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
+            onPaneClick={() => { if (!suppressCanvasClick.current) { setSelectedNodeId(null); setSelectedEdgeId(null); } }}
             onNodeDragStart={ws.beginDrag} onNodeDragStop={ws.endDrag}
-            nodesDraggable={editable} nodesConnectable={editable} elementsSelectable={!ws.busy} deleteKeyCode={null} minZoom={.15} maxZoom={1.7}
+            nodesDraggable={editable && !connectionDrag} nodesConnectable={editable} elementsSelectable={!ws.busy} deleteKeyCode={null} minZoom={.15} maxZoom={1.7}
             proOptions={{ hideAttribution: true }} panOnScroll selectionOnDrag={false} zoomOnDoubleClick={false} aria-label="流程图画布">
             <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#d7dbd4" />
+            <ViewportPortal><svg className="connection-edit-overlay" width={1} height={1}>
+              {editable && selectedEdgeId && scene.edges.filter(e => e.edge.id === selectedEdgeId && e.edge.source === selectedEdge?.source && e.edge.target === selectedEdge?.target).map(geometry => <g key={geometry.edge.id}>
+                {(['source', 'target'] as const).map(endpoint => <circle key={endpoint} className="connection-endpoint nodrag nopan" data-edge-id={geometry.edge.id} data-anchor-end={endpoint} cx={geometry[endpoint].x} cy={geometry[endpoint].y} r={7}
+                  onPointerDown={event => beginEndpointMove(event, endpoint)}><title>{endpoint === 'source' ? '拖动连线起点' : '拖动连线终点'}</title></circle>)}
+              </g>)}
+              {connectionDrag && (() => {
+                const tip = connectionDrag.candidate ? projectAnchor(scene.rects[connectionDrag.candidate.nodeId], connectionDrag.candidate.anchor) : connectionDrag.pointer;
+                const source = connectionDrag.endpoint === 'source' ? tip : connectionDrag.fixed, target = connectionDrag.endpoint === 'source' ? connectionDrag.fixed : tip;
+                return <g><defs><marker id="connection-preview-arrow" viewBox="0 0 10 10" refX={9} refY={5} markerWidth={6} markerHeight={6} orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#648160" /></marker></defs>
+                  <path className="connection-preview" d={`M${source.x},${source.y} L${target.x},${target.y}`} markerEnd="url(#connection-preview-arrow)" />
+                  <circle className={`connection-drop-point ${connectionDrag.candidate ? 'valid' : ''}`} cx={tip.x} cy={tip.y} r={7} />
+                </g>;
+              })()}
+            </svg></ViewportPortal>
             {!!displayGraph.nodes.length && <><Controls showInteractive={false} position="bottom-right" /><MiniMap position="bottom-left" pannable zoomable nodeColor={node => node.type === 'decision' ? '#e6cba1' : '#ccdcd1'} maskColor="rgba(248,247,243,.65)" /></>}
           </ReactFlow>
           {!displayGraph.nodes.length && <div className="empty-canvas">
@@ -248,6 +335,8 @@ function Workspace() {
               <label className="field-label" htmlFor="edge-label">分支条件或说明<span>例如：校验通过 / 失败且尚未重试</span></label><textarea id="edge-label" rows={3} value={selectedEdge.label || ''} disabled={!editable} onChange={event => ws.edit({ ...ws.graph, edges: ws.graph.edges.map(e => e.id === selectedEdge.id ? { ...e, label: event.target.value } : e) })} />
               <label className="field-label" htmlFor="edge-role">显示分类</label><select id="edge-role" disabled={!editable} value={selectedEdge.role || 'main'} onChange={event => { const graph = upgradeGraph(ws.graph); ws.edit({ ...graph, edges: graph.edges.map(e => e.id === selectedEdge.id ? { ...e, role: event.target.value as 'main' | 'support' | 'exception' } : e) }); }}><option value="main">主线 · 粗实线</option><option value="support">次要分支 · 细实线</option><option value="exception">异常分支 · 细虚线</option></select>
               <p className="field-hint">主循环上的主线会进一步加粗，便于顺着箭头阅读。</p>
+              <p className="field-hint">拖动连线两端，可沿卡片边缘调整位置，或接到其他卡片。</p>
+              {(selectedEdge.sourceAnchor || selectedEdge.targetAnchor) && <button className="button subtle" disabled={!editable} onClick={() => ws.edit({ ...ws.graph, edges: ws.graph.edges.map(edge => { if (edge.id !== selectedEdge.id) return edge; const { sourceAnchor: _source, targetAnchor: _target, ...automatic } = edge; return automatic; }) })}>自动选择连接点</button>}
               <div className="inspector-callout"><GitBranch size={17} /><p>条件判断的每条出口都需要标签，避免人和 agent 对同一条线理解不同。</p></div>
               <div className="node-identity">连线 ID <code>{selectedEdge.id}</code></div>
             </> : <>

@@ -1,9 +1,10 @@
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useState, type PointerEvent } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from '@xyflow/react';
 import { ChevronRight, Sparkles, UserRound, CircleDot, Flag, GitBranch, Layers2 } from 'lucide-react';
 import type { GraphNode, NodeData, NodeKind } from './types';
 import { EXECUTOR_LABELS } from './types';
 import type { nodePorts } from './geometry';
+import { CARD_RADIUS, closestOutlinePoint, type Point } from './anchors';
 
 export function NodeBody({ node, groupId, branchCount = 0, exceptionsOnly = false, onBranches, onGroup }: {
   node: GraphNode; groupId?: string; branchCount?: number; exceptionsOnly?: boolean; onBranches?: () => void; onGroup?: () => void;
@@ -22,22 +23,31 @@ export function NodeBody({ node, groupId, branchCount = 0, exceptionsOnly = fals
 }
 
 export type CanvasData = NodeData & { groupId?: string; branchCount?: number; exceptionsOnly?: boolean; ports?: ReturnType<typeof nodePorts>;
-  onBranches?: () => void; onGroup?: () => void; loopRadius?: number };
+  onBranches?: () => void; onGroup?: () => void; loopRadius?: number;
+  onOutlineStart?: (event: PointerEvent<SVGRectElement>, nodeId: string) => void };
 export type CanvasNode = Node<CanvasData, NodeKind | 'loop-area'>;
 const FlowNode = memo(function FlowNode({ id, type, data, selected, isConnectable }: NodeProps<CanvasNode>) {
   const update = useUpdateNodeInternals();
+  const [hoverPoint, setHoverPoint] = useState<Point | null>(null);
   const signature = JSON.stringify(data.ports);
   useEffect(() => { update(id); }, [id, signature, update]);
   const node: GraphNode = { id, type: type as NodeKind, position: { x: 0, y: 0 }, data };
   return <div className={`flow-node kind-${type} executor-${data.executor} ${selected ? 'is-selected' : ''}`}>
-    <Handle type="target" position={Position.Top} id="top" isConnectable={isConnectable} />
-    <Handle type="target" position={Position.Left} id="left-in" className="side-handle" style={{ top: '35%' }} isConnectable={isConnectable} />
-    <Handle type="target" position={Position.Right} id="right-in" className="side-handle" style={{ top: '35%' }} isConnectable={isConnectable} />
+    <Handle type="target" position={Position.Top} id="top" className="legacy-handle" isConnectable={false} />
+    <Handle type="target" position={Position.Left} id="left-in" className="legacy-handle" style={{ top: '35%' }} isConnectable={false} />
+    <Handle type="target" position={Position.Right} id="right-in" className="legacy-handle" style={{ top: '35%' }} isConnectable={false} />
     <NodeBody node={node} groupId={data.groupId} branchCount={data.branchCount} exceptionsOnly={data.exceptionsOnly} onBranches={data.onBranches} onGroup={data.onGroup} />
-    <Handle type="source" position={Position.Bottom} id="bottom" isConnectable={isConnectable} />
-    <Handle type="source" position={Position.Left} id="left" className="side-handle" style={{ top: '70%' }} isConnectable={isConnectable} />
-    <Handle type="source" position={Position.Right} id="right" className="side-handle" style={{ top: '70%' }} isConnectable={isConnectable} />
+    <Handle type="source" position={Position.Bottom} id="bottom" className="legacy-handle" isConnectable={false} />
+    <Handle type="source" position={Position.Left} id="left" className="legacy-handle" style={{ top: '70%' }} isConnectable={false} />
+    <Handle type="source" position={Position.Right} id="right" className="legacy-handle" style={{ top: '70%' }} isConnectable={false} />
     {data.ports?.map(port => <Handle key={port.id} id={port.id} type={port.type} position={Position.Top} isConnectable={false} className="routed-handle" style={{ left: port.x, top: port.y }} />)}
+    {isConnectable && <svg className="connection-outline-layer" width={248} height={116}>
+      <rect className="connection-outline nodrag nopan" data-connection-outline={id} x={0} y={0} width={248} height={116} rx={CARD_RADIUS}
+        onPointerDown={event => data.onOutlineStart?.(event, id)}
+        onPointerMove={event => { const box = event.currentTarget.getBoundingClientRect(); setHoverPoint(closestOutlinePoint({ x: 0, y: 0, width: 248, height: 116 }, { x: (event.clientX - box.left) * 248 / box.width, y: (event.clientY - box.top) * 116 / box.height })); }}
+        onPointerLeave={() => setHoverPoint(null)} />
+      {hoverPoint && <circle className="connection-outline-point" cx={hoverPoint.x} cy={hoverPoint.y} r={4} />}
+    </svg>}
   </div>;
 });
 export const LoopArea = memo(function LoopArea({ data }: NodeProps<CanvasNode>) {
