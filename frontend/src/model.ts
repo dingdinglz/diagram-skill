@@ -5,7 +5,6 @@ export const cloneGraph = (graph: Graph): Graph => JSON.parse(JSON.stringify(gra
 export const sameGraph = (a: Graph, b: Graph): boolean => JSON.stringify(a) === JSON.stringify(b);
 export const newId = (prefix: string) => `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 export const blankGraph = (title = '未命名流程'): Graph => ({ schemaVersion: 1, title, description: '', constraints: '', nodes: [], edges: [] });
-export const nodeWidth = (node: GraphNode) => node.data.expanded && node.data.notes ? 360 : 248;
 export function createNode(kind: NodeKind, position: { x: number; y: number }): GraphNode {
   const labels = { start: '流程开始', step: '新的处理步骤', decision: '是否满足条件？', end: '流程结束' };
   return { id: newId('node'), type: kind, position, data: { label: labels[kind], notes: '', executor: 'program', expanded: false } };
@@ -20,8 +19,8 @@ export function layoutGraph(graph: Graph, measurements: Record<string, { width: 
   layout.setGraph({ rankdir: 'TB', nodesep: 90, ranksep: 92, marginx: 60, marginy: 40 });
   layout.setDefaultEdgeLabel(() => ({}));
   graph.nodes.forEach(n => layout.setNode(n.id, {
-    width: measurements[n.id]?.width || nodeWidth(n),
-    height: measurements[n.id]?.height || (n.type === 'decision' ? 144 : 98) + (n.data.expanded ? Math.min(700, n.data.notes.length * 0.65) : 0),
+    width: measurements[n.id]?.width || 248,
+    height: measurements[n.id]?.height || (n.type === 'decision' ? 144 : 98),
   }));
   graph.edges.forEach(e => layout.setEdge(e.source, e.target, {}, e.id));
   dagre.layout(layout);

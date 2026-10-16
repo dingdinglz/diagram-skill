@@ -43,6 +43,10 @@ Add nodes from the left toolbar. Drag from a node's connection point to another 
 
 Notes support Markdown paragraphs, lists, field tables, and fenced code. Use the inspector for details or expand a card on the canvas. Raw HTML and embedded images are not supported.
 
+Expanding notes opens a scrollable floating panel beside the node. The node's size, connection points, edge paths, and canvas view stay in place. Close the panel with its close button or the node's toggle. Viewing notes does not save a draft, change the task revision, or enter undo/redo history. Content edits and autosave preserve the current view; switching tasks or historical versions resets it to that graph's saved defaults. PNG exports always include all notes.
+
+![Node details in a floating panel with the diagram layout preserved](images/note-details.png)
+
 Undo and redo work within the current editing session. Auto-layout only runs when you choose it. Before approving, give each decision at least two outgoing branches and label the conditions.
 
 The main actions are:
