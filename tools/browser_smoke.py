@@ -46,6 +46,22 @@ def click(name):
     browser('find', 'role', 'button', 'click', '--name', name)
 
 
+def canvas_geometry():
+    return evaluate('''(() => ({
+      viewport: document.querySelector('.react-flow__viewport').style.transform,
+      nodes: [...document.querySelectorAll('.react-flow__node')].map(node => ({
+        id: node.dataset.id, position: node.style.transform,
+        width: node.offsetWidth, height: node.offsetHeight,
+        handles: [...node.querySelectorAll('.react-flow__handle')].map(handle => ({
+          id: handle.dataset.handleid, x: handle.offsetLeft, y: handle.offsetTop
+        }))
+      })),
+      edges: [...document.querySelectorAll('.react-flow__edge')].map(edge => ({
+        id: edge.dataset.id, path: edge.querySelector('.react-flow__edge-path').getAttribute('d')
+      }))
+    }))()''')
+
+
 def main():
     if not BROWSER:
         raise SystemExit('Install agent-browser and its browser first; this is a development-only test.')
@@ -67,12 +83,52 @@ def main():
             wait_for('document.querySelectorAll(".react-flow__minimap-node").length === 7')
 
             browser('click', '[data-id="normalize-fields"]')
+            # Reading notes must not save a draft or consume undo/redo history.
+            initial_state = cli('show', '--task', task_id)
+            initial_geometry = canvas_geometry()
+            click('在画布上展开说明')
+            wait_for('!!document.querySelector(".node-notes[data-node-id=normalize-fields]")')
+            browser('wait', '1000')  # Longer than the draft autosave debounce.
+            assert cli('show', '--task', task_id) == initial_state, 'Expanding notes must not mutate the task'
+            assert canvas_geometry() == initial_geometry, 'Expanding notes must keep node geometry, edge paths, and viewport unchanged'
+            assert evaluate('document.querySelector(".app-shell").dataset.dirty === "false"')
+            assert evaluate('document.querySelector("button[aria-label=撤销]").disabled'), 'Reading notes must not create an undo entry'
+            assert evaluate('''(() => {
+              const panel=document.querySelector('.node-notes').getBoundingClientRect();
+              const canvas=document.querySelector('.react-flow').getBoundingClientRect();
+              return panel.left >= canvas.left && panel.right <= canvas.right && panel.top >= canvas.top && panel.bottom <= canvas.bottom;
+            })()'''), 'Notes must stay inside the visible canvas'
+            browser('screenshot', str(ARTIFACTS / 'notes-open.png'))
+            notes_scroller = '.node-notes[data-node-id="normalize-fields"] .node-notes-scroll'
+            assert evaluate('document.querySelector(' + json.dumps(notes_scroller) + ').scrollHeight > document.querySelector(' + json.dumps(notes_scroller) + ').clientHeight'), 'Long notes must scroll within the panel'
+            browser('scroll', 'down', '250', '--selector', notes_scroller)
+            wait_for('document.querySelector(' + json.dumps(notes_scroller) + ').scrollTop > 0')
+            evaluate('document.querySelector(' + json.dumps(notes_scroller) + ').dispatchEvent(new WheelEvent("wheel", {bubbles:true,cancelable:true,deltaY:100}))')
+            assert canvas_geometry() == initial_geometry, 'Scrolling notes must not pan the canvas'
+            click('关闭 整理输入字段 的说明')
+            wait_for('!document.querySelector(".node-notes[data-node-id=normalize-fields]")')
+            assert canvas_geometry() == initial_geometry, 'Closing notes must preserve geometry'
+            for node_id in ('receive-message', 'validate-message', 'finish-attempt'):
+                browser('click', '.react-flow__node[data-id="' + node_id + '"] .node-note-toggle')
+                wait_for('!!document.querySelector(".node-notes[data-node-id=' + node_id + ']")')
+                assert canvas_geometry() == initial_geometry, 'All node shapes must retain their connection points'
+                browser('click', '.node-notes[data-node-id="' + node_id + '"] button')
+            browser('click', '[data-id="normalize-fields"] .node-note-toggle')
+            browser('click', '[data-id="normalize-fields"] .node-note-toggle')
+            wait_for('!document.querySelector(".node-notes[data-node-id=normalize-fields]")')
+            browser('click', '[data-id="normalize-fields"] .node-note-toggle')
             browser('fill', '#node-label', '整理并校验输入格式')
             wait_for('document.querySelector(".app-shell")?.dataset.dirty === "false" && Number(document.querySelector(".app-shell").dataset.revision) > 1')
+            assert evaluate('!!document.querySelector(".node-notes[data-node-id=normalize-fields]")'), 'Autosaving content must preserve the reading state'
             click('撤销')
             assert evaluate('document.querySelector("#node-label").value') == '整理输入字段'
+            assert evaluate('!!document.querySelector(".node-notes[data-node-id=normalize-fields]")'), 'Undo must only affect content'
+            click('在画布上收起说明')
+            assert evaluate('!document.querySelector("button[aria-label=重做]").disabled'), 'Reading notes must preserve redo history'
             click('重做')
             assert evaluate('document.querySelector("#node-label").value') == '整理并校验输入格式'
+            assert not evaluate('!!document.querySelector(".node-notes[data-node-id=normalize-fields]")'), 'Redo must preserve the reading state'
+            click('在画布上展开说明')
             click('请 agent 修改')
             browser('fill', '#feedback', '空消息返回明确错误；保留布局。')
             click('提交图与反馈')
@@ -80,6 +136,11 @@ def main():
             handoff = cli('wait', '--task', task_id, '--timeout', '1')
             assert handoff['status'] == 'awaiting_agent' and handoff['artifacts']['hasPng']
             submitted = json.loads(Path(handoff['artifacts']['paths']['json']).read_text())
+            assert not next(n for n in submitted['nodes'] if n['id'] == 'normalize-fields')['data']['expanded'], 'Handoff must not persist viewing preferences'
+            readonly_state = cli('show', '--task', task_id)
+            browser('click', '[data-id="normalize-fields"] .node-note-toggle')
+            browser('wait', '1000')
+            assert cli('show', '--task', task_id) == readonly_state, 'Reading a submitted plan must not change its state'
             positions = {n['id']: n['position'] for n in submitted['nodes']}
             submitted['nodes'][1]['data']['notes'] += '\n\n浏览器验收标记：空消息返回 `body.required`，不记录消息正文。'
             revision_file = project / 'revision.json'
@@ -176,7 +237,7 @@ def main():
             browser('wait', '--text', '已导出完整 PNG')
             assert not evaluate('!!document.querySelector(".message-bar.error")')
             browser('screenshot', str(ARTIFACTS / 'editor.png'))
-            print('PASS: manual editing/connection, autosave, undo/redo, real PNG, feedback, revision CAS, approval, immutable restore, cancel, restart, local conflicts, and no external resources.')
+            print('PASS: floating notes with stable geometry and scroll, read-only note toggles, manual editing/connection, autosave, undo/redo, real PNG, feedback, revision CAS, approval, immutable restore, cancel, restart, local conflicts, and no external resources.')
             print('Artifacts:', ARTIFACTS)
         finally:
             cli('stop', check=False)

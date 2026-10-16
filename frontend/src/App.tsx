@@ -38,14 +38,14 @@ function Workspace() {
   useEffect(() => {
     setSelectedNodeId(null); setSelectedEdgeId(null); setHistorical(null); setViewExpansions({});
   }, [ws.task?.id]);
-  useEffect(() => { setViewExpansions({}); }, [historical?.id, ws.task?.revision]);
+  useEffect(() => { setViewExpansions({}); }, [historical?.id]);
   const updateNode = (patch: Partial<GraphNode['data']>) => {
     if (selectedNode) ws.edit({ ...ws.graph, nodes: ws.graph.nodes.map(n => n.id === selectedNode.id ? { ...n, data: { ...n.data, ...patch } } : n) });
   };
   const toggleNode = useCallback((id: string) => {
-    if (editable) ws.edit({ ...ws.graph, nodes: ws.graph.nodes.map(n => n.id === id ? { ...n, data: { ...n.data, expanded: !n.data.expanded } } : n) });
-    else setViewExpansions(previous => ({ ...previous, [id]: !(previous[id] ?? displayGraph.nodes.find(n => n.id === id)?.data.expanded) }));
-  }, [editable, ws.graph, ws.edit, displayGraph]);
+    // Reading notes is local view state, independent of edits and undo/redo.
+    setViewExpansions(previous => ({ ...previous, [id]: !(previous[id] ?? displayGraph.nodes.find(n => n.id === id)?.data.expanded) }));
+  }, [displayGraph.nodes]);
   const nodes = useMemo<CanvasNode[]>(() => displayGraph.nodes.map(node => ({ ...node, measured: nodeMeasurements[node.id], selected: node.id === selectedNodeId, data: { ...node.data, expanded: viewExpansions[node.id] ?? node.data.expanded, onToggle: toggleNode } })), [displayGraph.nodes, selectedNodeId, toggleNode, viewExpansions, nodeMeasurements]);
   const edges = useMemo(() => displayGraph.edges.map(edge => {
     const llm = displayGraph.nodes.find(n => n.id === edge.source)?.data.executor === 'llm';

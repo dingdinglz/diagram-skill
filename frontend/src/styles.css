@@ -106,7 +106,6 @@ code { font-family: var(--mono); }
 .flow-node:hover .side-handle, .flow-node.is-selected .side-handle { opacity: 1; }
 .react-flow__node:focus-visible { outline: 2px solid #6f9263; outline-offset: 6px; border-radius: 12px; }
 .flow-node { width: 248px; font-family: var(--font); color: #394936; font-size: 13px; }
-.flow-node.has-expanded-notes { width: 360px; }
 .node-body { position: relative; min-height: 92px; padding: 15px 19px 16px; border: 1px solid #bfcfb7; border-radius: 9px; background: #fcfdf8; box-shadow: 0 2px 4px #1f3a1910; transition: border-color .15s, box-shadow .15s; }
 .flow-node.is-selected > .node-body { border-color: #628858; box-shadow: 0 0 0 3px #4e7a4120, 0 2px 5px #203b1510; }
 .node-eyebrow { display: flex; gap: 5px; align-items: center; font-size: 9px; color: #91a083; margin-bottom: 8px; letter-spacing: .5px; position: relative; }
@@ -127,8 +126,12 @@ code { font-family: var(--mono); }
 .node-note-toggle { position: relative; display: flex; align-items: center; gap: 4px; font-size: 9px; margin: 10px 0 0; padding: 0; color: #96a18d; }
 .node-note-toggle > svg:last-child { margin-left: auto; }
 .kind-decision .node-note-toggle { margin-top: 6px; }
-.node-notes { margin-top: 8px; padding: 15px; background: #fffdf6; border: 1px solid #e1e1d0; border-left: 3px solid #d5dcc7; border-radius: 6px; font-size: 11px; box-shadow: 0 2px 3px #66512c05; }
-.node-notes .markdown { max-height: none; font-size: 11px; }
+.node-notes { display: flex; flex-direction: column; background: #fffdf6; border: 1px solid #d5dcc7; border-radius: 9px; font-size: 12px; box-shadow: 0 8px 28px #30462324; overflow: hidden; }
+.node-notes-header { display: flex; align-items: center; gap: 12px; flex-shrink: 0; padding: 10px 12px 10px 16px; border-bottom: 1px solid #e1e5d8; color: #526849; font-weight: 550; }
+.node-notes-header > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.node-notes-header > button { flex-shrink: 0; }
+.node-notes-scroll { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 15px; }
+.node-notes .markdown { max-height: none; font-size: 12px; }
 .muted { color: #b1b8a7; }
 .empty-canvas { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -48%); text-align: center; width: 400px; max-width: 90%; }
 .empty-diagram { display: flex; justify-content: center; align-items: center; margin-bottom: 31px; }

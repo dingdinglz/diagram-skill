@@ -43,6 +43,15 @@ describe('graph semantics', () => {
     expect(graph.nodes[0].position.x).toBe(10);
   });
   it('returns empty graphs untouched', () => { const graph = blankGraph(); expect(layoutGraph(graph)).toBe(graph); });
+  it('keeps layout independent of expanded notes before nodes are measured', () => {
+    const graph = fixture();
+    const collapsed = layoutGraph(graph);
+    graph.nodes.forEach(node => { node.data.expanded = true; node.data.notes = 'Long notes. '.repeat(300); });
+    const expanded = layoutGraph(graph);
+    expect(expanded.nodes.map(node => node.position)).toEqual(collapsed.nodes.map(node => node.position));
+    expect(expanded.edges).toEqual(collapsed.edges);
+    expect(expanded.nodes.every(node => node.data.expanded)).toBe(true);
+  });
   it('warns about disconnected nodes without forbidding the draft', () => {
     const graph = fixture(); graph.edges = [];
     expect(graphWarnings(graph).join('')).toContain('尚未连接');
