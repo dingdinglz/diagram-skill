@@ -51,7 +51,7 @@ export function useWorkspace() {
     if (inspectRecovery && next.status === 'draft') {
       try {
         const saved = JSON.parse(localStorage.getItem(recoveryKey(id)) || 'null');
-        if (saved?.graph?.schemaVersion === 1 && Array.isArray(saved.graph.nodes) && Array.isArray(saved.graph.edges) && !sameGraph(saved.graph, next.graph)) setRecovery(saved.graph);
+        if ([1, 2].includes(saved?.graph?.schemaVersion) && Array.isArray(saved.graph.nodes) && Array.isArray(saved.graph.edges) && !sameGraph(saved.graph, next.graph)) setRecovery(saved.graph);
       } catch { /* corrupt recovery cache is never authoritative */ }
     }
     setError(''); setOnline(true);

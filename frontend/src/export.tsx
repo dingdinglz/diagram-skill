@@ -1,79 +1,39 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { toPng } from 'html-to-image';
-import { getSmoothStepPath, Position } from '@xyflow/react';
-import type { Graph, GraphNode } from './types';
-import { NodeBody } from './FlowNode';
+import type { Graph } from './types';
+import { EXECUTOR_LABELS } from './types';
 import { Markdown } from './Markdown';
+import { exportViews } from './views';
+import { createScene } from './geometry';
+import { SceneDiagram } from './SceneDiagram';
 
-interface Rect { x: number; y: number; width: number; height: number }
-function endpoint(rect: Rect, handle: string | null | undefined, source: boolean) {
-  if (handle?.startsWith('left')) return { x: rect.x, y: rect.y + rect.height * (source ? .7 : .35), position: Position.Left };
-  if (handle?.startsWith('right')) return { x: rect.x + rect.width, y: rect.y + rect.height * (source ? .7 : .35), position: Position.Right };
-  return source ? { x: rect.x + rect.width / 2, y: rect.y + rect.height, position: Position.Bottom }
-    : { x: rect.x + rect.width / 2, y: rect.y, position: Position.Top };
-}
 function ExportDocument({ graph, onReady }: { graph: Graph; onReady: (element: HTMLElement) => void }) {
   const root = useRef<HTMLDivElement>(null);
-  const [measurements, setMeasurements] = useState<Record<string, { width: number; height: number }> | null>(null);
-  const nodes = graph.nodes.map(n => ({ ...n, data: { ...n.data, expanded: false } }));
-  useLayoutEffect(() => {
-    if (!root.current) return;
-    const result: Record<string, { width: number; height: number }> = {};
-    root.current.querySelectorAll<HTMLElement>('[data-export-node]').forEach(element => {
-      result[element.dataset.exportNode!] = { width: element.offsetWidth, height: element.offsetHeight };
-    });
-    setMeasurements(result);
-  }, []);
-  useLayoutEffect(() => {
-    if (measurements && root.current) onReady(root.current);
-  }, [measurements, onReady]);
-  const minX = nodes.length ? Math.min(...nodes.map(n => n.position.x)) : 0;
-  const minY = nodes.length ? Math.min(...nodes.map(n => n.position.y)) : 0;
-  const rects: Record<string, Rect> = {};
-  nodes.forEach(n => { rects[n.id] = { x: n.position.x - minX + 80, y: n.position.y - minY + 60, width: measurements?.[n.id]?.width || 248, height: measurements?.[n.id]?.height || 120 }; });
-  const nodeRight = Math.max(300, ...Object.values(rects).map(r => r.x + r.width));
-  const backEdges = graph.edges.filter(e => rects[e.target] && rects[e.source] && rects[e.target].y <= rects[e.source].y);
-  const width = nodeRight + (backEdges.length ? 220 + backEdges.length * 22 : 100);
-  const height = Math.max(150, ...Object.values(rects).map(r => r.y + r.height)) + 80;
-  const sheetWidth = Math.max(980, Math.min(2400, width + 96));
-  const scale = Math.min(1, (sheetWidth - 96) / width);
-  const notes = nodes.filter(n => n.data.notes.trim());
-  const longConditions = graph.edges.map((edge, index) => ({ edge, index })).filter(({ edge }) => Array.from(edge.label || '').length > 28);
-  return <div ref={root} className="export-sheet" data-graph-scale={scale} style={{ width: sheetWidth }}>
-    <header className="export-heading"><div className="export-brand">FLOWPLAN <span>/ VISUAL PLAN</span></div><div className="export-meta">{nodes.length} 个节点 · {graph.edges.length} 条连线 · 完整说明</div></header>
+  const scenes = useMemo(() => exportViews(graph).map(view => createScene(view)), [graph]);
+  const longDocument = graph.nodes.length > 12 || graph.nodes.reduce((sum,n)=>sum+n.data.notes.length,0) > 12000;
+  const sheetWidth = Math.max(longDocument ? 2240 : 1280, Math.min(2400, Math.max(...scenes.map(s => s.bounds.width)) + 96));
+  const columns = sheetWidth >= 2000 ? 2 : 1;
+  const columnWidth = (sheetWidth - 96 - (columns-1)*32) / columns;
+  const spans = scenes.map((s,i)=>i===0 || s.bounds.width*0.7 > columnWidth ? columns : 1);
+  const scales = scenes.map((s,i) => Math.min(1, (spans[i]===columns ? sheetWidth-96 : columnWidth) / s.bounds.width));
+  useLayoutEffect(() => { if (root.current) onReady(root.current); }, [onReady]);
+  return <div ref={root} className="export-sheet" data-graph-scale={Math.min(...scales)} style={{width:sheetWidth}}>
+    <header className="export-heading"><div className="export-brand">FLOWPLAN</div><div className="export-meta">{graph.nodes.length} 个节点 · {graph.edges.length} 条连线 · 完整说明</div></header>
     <h1>{graph.title || '未命名流程'}</h1>
-    {!!graph.description && <div className="export-description"><Markdown text={graph.description} /></div>}
-    <div className="export-graph-outer" style={{ height: height * scale }}>
-      <div className="export-graph" style={{ width, height, transform: `translateX(${(sheetWidth - 96 - width * scale) / 2}px) scale(${scale})`, transformOrigin: 'top left' }}>
-        <svg className="export-connections" width={width} height={height}>
-          <defs><marker id="export-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#75827a" /></marker><marker id="export-arrow-llm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#6183a0" /></marker></defs>
-          {graph.edges.map((edge, edgeIndex) => {
-            const source = rects[edge.source], target = rects[edge.target];
-            if (!source || !target) return null;
-            const s = endpoint(source, edge.sourceHandle, true), t = endpoint(target, edge.targetHandle, false);
-            let [path, labelX, labelY] = getSmoothStepPath({ sourceX: s.x, sourceY: s.y, sourcePosition: s.position, targetX: t.x, targetY: t.y, targetPosition: t.position, borderRadius: 12, offset: 26 });
-            const backIndex = backEdges.findIndex(e => e.id === edge.id);
-            if (backIndex >= 0) {
-              const gutter = nodeRight + 44 + backIndex * 22;
-              path = `M${s.x},${s.y} L${s.x},${s.y + 24} L${gutter},${s.y + 24} L${gutter},${t.y - 24} L${t.x},${t.y - 24} L${t.x},${t.y}`;
-              labelX = gutter + 60; labelY = (s.y + t.y) / 2;
-            }
-            const llm = nodes.find(n => n.id === edge.source)?.data.executor === 'llm';
-            const labelCharacters = Array.from(edge.label || '');
-            const visibleLabel = labelCharacters.length > 28 ? `${labelCharacters.slice(0, 20).join('')}… [E${edgeIndex + 1}]` : edge.label;
-            return <g key={edge.id}><path d={path} fill="none" stroke={llm ? '#6183a0' : '#75827a'} strokeWidth={1.7} markerEnd={`url(#export-arrow${llm ? '-llm' : ''})`} />
-              {!!edge.label && <foreignObject x={labelX - 85} y={labelY - 22} width="170" height="80"><div className="export-edge-label">{visibleLabel}</div></foreignObject>}
-            </g>;
-          })}
-        </svg>
-        {nodes.map(node => <div key={node.id} data-export-node={node.id} className={`flow-node kind-${node.type} executor-${node.data.executor} export-node`} style={{ left: rects[node.id].x, top: rects[node.id].y }}><NodeBody node={node as GraphNode} forceCollapsed /></div>)}
-      </div>
-    </div>
-    {!!longConditions.length && <section className="export-constraints"><h2>完整连线条件 <span>图中长标签以 E 编号对应，下列内容未缩略</span></h2><div className="markdown"><table><thead><tr><th>连线</th><th>完整条件</th></tr></thead><tbody>{longConditions.map(({ edge, index }) => <tr key={edge.id}><td>E{index + 1} · {nodes.find(n => n.id === edge.source)?.data.label} → {nodes.find(n => n.id === edge.target)?.data.label}</td><td style={{ whiteSpace: 'pre-wrap' }}>{edge.label}</td></tr>)}</tbody></table></div></section>}
-    {!!notes.length && <section className="export-details"><h2>节点说明 <span>所有说明均展开，不受画板折叠状态影响</span></h2><div className="export-note-grid">{notes.map((n, i) => <article className="export-note" key={n.id}><header><span className="note-number">{String(i + 1).padStart(2, '0')}</span><h3>{n.data.label}</h3></header><div className="export-node-id">{n.id}</div><Markdown text={n.data.notes} /></article>)}</div></section>}
-    {!!graph.constraints.trim() && <section className="export-constraints"><h2>约束与验收条件</h2><Markdown text={graph.constraints} /></section>}
-    <footer className="export-footer"><span>图先行，再实现。</span><span>图数据与文字说明共同组成需求；PNG 是同一版本的可视视图。</span></footer>
+    {!!graph.description && <div className="export-description"><Markdown text={graph.description}/></div>}
+    <div className="export-view-grid" style={{gridTemplateColumns:`repeat(${columns},minmax(0,1fr))`}}>{scenes.map((scene,index)=><section key={scene.view.id} className="export-view" data-export-view={scene.view.id} style={{gridColumn:`span ${spans[index]}`}}>
+      <h2>{index===0?'主流程':scene.view.title}</h2>{scene.view.summary&&<Markdown text={scene.view.summary}/>}
+      <div className="export-graph-outer" style={{height:scene.bounds.height*scales[index],width:scene.bounds.width*scales[index],marginLeft:'auto',marginRight:'auto'}}><div style={{transform:`scale(${scales[index]})`,transformOrigin:'top left'}}><SceneDiagram scene={scene}/></div></div>
+    </section>)}</div>
+    <section className="export-details"><h2>节点说明</h2><div className="export-note-grid" style={{columnCount:sheetWidth>=2000 ? 3 : 2}}>{graph.nodes.map((n,i)=><article className="export-note" key={n.id} data-export-note={n.id}>
+      <header><span className="note-number">{String(i+1).padStart(2,'0')}</span><h3>{n.data.label}</h3></header>
+      <div className="export-node-id">{n.id} · {EXECUTOR_LABELS[n.data.executor]}</div>
+      {n.data.summary&&<p className="export-summary">{n.data.summary}</p>}<Markdown text={n.data.notes}/>
+    </article>)}</div></section>
+    <section className="export-constraints"><h2>全部连线与条件</h2><div className="markdown"><table><thead><tr><th>连线</th><th>起点 → 终点</th><th>条件 / 说明</th></tr></thead><tbody>{graph.edges.map(e=><tr key={e.id} data-export-edge={e.id}><td>{e.id}</td><td>{graph.nodes.find(n=>n.id===e.source)?.data.label} → {graph.nodes.find(n=>n.id===e.target)?.data.label}</td><td style={{whiteSpace:'pre-wrap'}}>{e.label||'继续'}</td></tr>)}</tbody></table></div></section>
+    {!!graph.constraints.trim()&&<section className="export-constraints"><h2>约束与验收条件</h2><Markdown text={graph.constraints}/></section>}
+    <footer className="export-footer"><span>Flowplan</span><span>主图、分支和说明对应同一份图数据。</span></footer>
   </div>;
 }
 
