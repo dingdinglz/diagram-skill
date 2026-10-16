@@ -120,9 +120,10 @@ def normalize_graph(value, approval=False):
             fail(path, str(exc))
             return default
 
-    if type(value.get("schemaVersion")) is not int or value["schemaVersion"] != 1:
-        fail("schemaVersion", "must be 1")
-    graph = {"schemaVersion": 1}
+    if type(value.get("schemaVersion")) is not int or value["schemaVersion"] not in (1, 2):
+        fail("schemaVersion", "must be 1 or 2")
+    version = value.get("schemaVersion", 1)
+    graph = {"schemaVersion": version}
     for name, maximum in (("title", 500), ("description", 50000), ("constraints", 100000)):
         graph[name] = string(value.get(name, ""), name, maximum)
     nodes = value.get("nodes", [])
@@ -177,6 +178,14 @@ def normalize_graph(value, approval=False):
         graph["nodes"].append({"id": node_id, "type": kind, "position": pos,
                                "data": {"label": label, "notes": notes,
                                         "executor": executor, "expanded": expanded}})
+        if version == 2:
+            role = data.get("role", "main")
+            if role not in ("main", "support", "exception"):
+                fail(path + ".data.role", "must be main, support, or exception")
+            graph["nodes"][-1]["data"].update(
+                summary=string(data.get("summary", ""), path + ".data.summary", 2000), role=role)
+        elif "summary" in data or "role" in data:
+            fail(path + ".data", "summary and role require schemaVersion 2")
     for index, edge in enumerate(edges):
         path = "edges[%d]" % index
         if not isinstance(edge, dict):
@@ -200,6 +209,29 @@ def normalize_graph(value, approval=False):
             fail(path + ".targetHandle", "must be top, left-in, or right-in")
         graph["edges"].append(dict(endpoints, id=edge_id, label=label,
                                    sourceHandle=source_handle, targetHandle=target_handle))
+        if version == 2:
+            role = edge.get("role", "main")
+            if role not in ("main", "support", "exception"):
+                fail(path + ".role", "must be main, support, or exception")
+            graph["edges"][-1]["role"] = role
+        elif "role" in edge:
+            fail(path + ".role", "requires schemaVersion 2")
+        for name in ("sourceAnchor", "targetAnchor"):
+            if name not in edge:
+                continue
+            if version != 2:
+                fail(path + "." + name, "requires schemaVersion 2")
+                continue
+            anchor = edge[name]
+            if (not isinstance(anchor, dict) or any(type(anchor.get(c)) not in (int, float)
+                    or not 0 <= anchor[c] <= 1 for c in ("x", "y"))):
+                fail(path + "." + name, "must contain finite normalized x and y coordinates between 0 and 1")
+            else:
+                graph["edges"][-1][name] = {c: anchor[c] for c in ("x", "y")}
+    if version == 2:
+        graph["groups"] = normalize_groups(value.get("groups", []), graph, fail, string, approval)
+    elif "groups" in value:
+        fail("groups", "requires schemaVersion 2")
     if approval:
         if not graph["title"].strip():
             fail("title", "is required for approval")
@@ -219,6 +251,113 @@ def normalize_graph(value, approval=False):
     if errors:
         raise DiagramError("Graph validation failed", code="invalid_graph", details=errors)
     return graph
+
+
+def normalize_groups(raw, graph, fail, string, approval):
+    """Groups are presentation metadata; real edges remain the only behavior source."""
+    if not isinstance(raw, list) or len(raw) > MAX_NODES:
+        fail("groups", "must be an array with at most %d groups" % MAX_NODES)
+        return []
+    nodes = {n["id"] for n in graph["nodes"]}
+    result = []
+    ids = set()
+    for i, item in enumerate(raw):
+        path = "groups[%d]" % i
+        if not isinstance(item, dict):
+            fail(path, "must be an object")
+            continue
+        group_id = string(item.get("id", ""), path + ".id", 128)
+        if not group_id.strip() or group_id in ids or group_id in nodes:
+            fail(path + ".id", "must be nonempty and unique across nodes and groups")
+        ids.add(group_id)
+        kind = item.get("kind")
+        if kind not in ("loop", "subflow", "branch"):
+            fail(path + ".kind", "must be loop, subflow, or branch")
+        members = item.get("nodeIds", [])
+        if (not isinstance(members, list) or not members or len(members) > MAX_NODES
+                or any(not isinstance(x, str) or x not in nodes for x in members)
+                or len(set(members)) != len(members)):
+            fail(path + ".nodeIds", "must contain unique existing node IDs")
+            members = []
+        order = item.get("order", [])
+        if (not isinstance(order, list) or len(order) > MAX_NODES
+                or any(not isinstance(x, str) for x in order) or len(set(order)) != len(order)):
+            fail(path + ".order", "must contain unique node or direct child group IDs")
+            order = []
+        parent = item.get("parentId")
+        if parent is not None and not isinstance(parent, str):
+            fail(path + ".parentId", "must be a group ID or null")
+            parent = None
+        position = item.get("position", {})
+        if (not isinstance(position, dict) or any(type(position.get(c)) not in (int, float)
+                or not -1000000 <= position[c] <= 1000000 for c in ("x", "y"))):
+            fail(path + ".position", "must contain finite x and y coordinates")
+            position = {"x": 0, "y": 0}
+        label = string(item.get("label", ""), path + ".label", 2000)
+        if approval and not label.strip():
+            fail(path + ".label", "is required for approval")
+        result.append(dict(id=group_id, kind=kind, label=label,
+                           summary=string(item.get("summary", ""), path + ".summary", 2000),
+                           parentId=parent, nodeIds=members, order=order,
+                           position={c: position[c] for c in ("x", "y")}))
+        if "circle" in item:
+            circle = item["circle"]
+            if (not isinstance(circle, dict) or any(type(circle.get(c)) not in (int, float)
+                    or not -1000000 <= circle[c] <= 1000000 for c in ("x", "y"))
+                    or type(circle.get("radius")) not in (int, float)
+                    or not 0 < circle["radius"] <= 1000000):
+                fail(path + ".circle", "must contain finite x and y coordinates and a positive radius at most 1000000")
+            else:
+                result[-1]["circle"] = {c: circle[c] for c in ("x", "y", "radius")}
+    by_id = {g["id"]: g for g in result}
+    for g in result:
+        chain = set()
+        parent = g["parentId"]
+        while parent is not None:
+            if parent not in by_id or parent in chain or parent == g["id"] or len(chain) >= 32:
+                fail("groups." + g["id"], "parent hierarchy must exist, be acyclic, and at most 32 levels deep")
+                break
+            chain.add(parent)
+            parent = by_id[parent]["parentId"]
+        if g["parentId"] in by_id and not set(g["nodeIds"]) <= set(by_id[g["parentId"]]["nodeIds"]):
+            fail("groups." + g["id"] + ".nodeIds", "child members must be contained in their parent")
+    for g in result:
+        children = [c for c in result if c["parentId"] == g["id"]]
+        items = {n: {n} for n in g["nodeIds"]}
+        items.update({c["id"]: set(c["nodeIds"]) for c in children})
+        if any(x not in items for x in g["order"]):
+            fail("groups." + g["id"] + ".order", "must reference member nodes or direct child groups")
+            continue
+        if g["kind"] == "loop":
+            if not g["order"]:
+                fail("groups." + g["id"] + ".order", "a loop must have a nonempty circular order")
+                continue
+            order = g["order"]
+            if any(items[a] & items[b] for i, a in enumerate(order) for b in order[i + 1:]):
+                fail("groups." + g["id"] + ".order", "ordered child slots must not overlap; use real node IDs for shared steps")
+                continue
+            for src, dst in zip(order, order[1:] + order[:1]):
+                if not any(e["source"] in items[src] and e["target"] in items[dst] for e in graph["edges"]):
+                    fail("groups." + g["id"] + ".order", "each circular step must follow an existing edge")
+            # A boundary cycle alone can be misleading if a subflow has disconnected
+            # input/output paths. Verify an actual directed cycle traverses every item.
+            adjacency = {n: [] for n in g["nodeIds"]}
+            for e in graph["edges"]:
+                if e["source"] in adjacency and e["target"] in adjacency:
+                    adjacency[e["source"]].append(e["target"])
+            def reachable(start):
+                seen, todo = set(), list(adjacency[start])
+                while todo:
+                    n = todo.pop()
+                    if n not in seen:
+                        seen.add(n)
+                        todo.extend(adjacency[n])
+                return seen
+            reach = {n: reachable(n) for n in adjacency}
+            if not any(n in reach[n] and all(any(m in reach[n] and n in reach[m] for m in members)
+                       for members in (items[item] for item in order)) for n in adjacency):
+                fail("groups." + g["id"], "must contain a real directed cycle through all circular items")
+    return result
 
 
 def decode_png(value):
@@ -381,6 +520,9 @@ def graph_markdown(graph, feedback=""):
                       "- Position: (%s, %s)" % (node["position"]["x"], node["position"]["y"]),
                       "- Expanded in editor: " + str(data["expanded"]).lower(), "",
                       markdown_notes(data["notes"]) or "_No notes._", ""])
+        if graph["schemaVersion"] == 2:
+            lines.extend(["- Summary: " + markdown_inline(data.get("summary", "")),
+                          "- Role: " + data.get("role", "main"), ""])
     if not graph["nodes"]:
         lines.extend(["_No nodes._", ""])
     lines.extend(["## Edges", "", "| ID | Source | Target | Condition / label | Source handle | Target handle |",
@@ -388,6 +530,28 @@ def graph_markdown(graph, feedback=""):
     for edge in graph["edges"]:
         lines.append("| " + " | ".join(markdown_inline(edge[name]) for name in
                      ("id", "source", "target", "label", "sourceHandle", "targetHandle")) + " |")
+    if graph["schemaVersion"] == 2:
+        lines.extend(["", "## Presentation groups", ""])
+        for g in graph.get("groups", []):
+            lines.extend(["### " + markdown_inline(g["label"]), "",
+                          "- ID: " + markdown_inline(g["id"]), "- Kind: " + g["kind"],
+                          "- Parent: " + markdown_inline(g["parentId"] or "root"),
+                          "- Members: " + ", ".join(markdown_inline(n) for n in g["nodeIds"]),
+                          "- Circular order: " + ", ".join(markdown_inline(n) for n in g["order"]),
+                          markdown_notes(g["summary"]), ""])
+            if "circle" in g:
+                circle = g["circle"]
+                lines.extend(["- Circle: " + ", ".join("%s=%s" % (key, circle[key])
+                                                     for key in ("x", "y", "radius")), ""])
+        lines.extend(["## Edge roles", ""] + ["- " + markdown_inline(e["id"]) + ": " + e.get("role", "main") for e in graph["edges"]])
+        anchored = [e for e in graph["edges"] if "sourceAnchor" in e or "targetAnchor" in e]
+        if anchored:
+            lines.extend(["", "## Connection anchors", ""])
+            for edge in anchored:
+                for name in ("sourceAnchor", "targetAnchor"):
+                    if name in edge:
+                        anchor = edge[name]
+                        lines.append("- %s %s: x=%s, y=%s" % (markdown_inline(edge["id"]), name, anchor["x"], anchor["y"]))
     lines.extend(["", "## Feedback", "", markdown_notes(feedback) or "_None._", ""])
     return "\n".join(lines)
 

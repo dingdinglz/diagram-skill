@@ -1,4 +1,4 @@
-# Diagram Plan v1 implementation contract
+# Diagram Plan implementation contract
 
 The release is a portable skill in `skills/diagram-plan/`, containing SKILL.md, Python stdlib scripts, references and a prebuilt `web/` app. Frontend source is `frontend/`. Python 3.8+ is available in the development environment. First release supports macOS/Linux (POSIX file locking, not native Windows). No Node, network, CDN, MCP or model credentials are needed at runtime. Bind to loopback only.
 
@@ -27,7 +27,7 @@ The release is a portable skill in `skills/diagram-plan/`, containing SKILL.md, 
 
 Node types: `start`, `step`, `decision`, `end`. Executor: `program`, `llm`, `human`. Notes default empty, executor defaults program, expanded defaults false; title/description/constraints default to empty strings where appropriate. Only explicit graph fields persist; React Flow internal measurements/selection do not. Node/edge IDs are unique nonempty strings; validate lengths, finite positions, endpoint references, types, text, size limits. Edges have source handles bottom/left/right and target handles top/left-in/right-in (optional handles default bottom/top). Duplicate IDs and dangling edges are errors. Graph title required for approval. Approval requires at least one node, nonempty node labels, and each decision to have at least two outgoing edges with nonempty condition labels. Drafts can be incomplete. PNG must be a valid bounded PNG, not an arbitrary base64 string.
 
-Markdown is derived, never a second writable source. No raw HTML, remote images or arbitrary embedded resources. Export PNG from a dedicated browser-rendered full-graph view, including expanded node notes and graph description/constraints, independent of viewport or collapsed state.
+Markdown is derived, never a second writable source. No raw HTML, remote images or arbitrary embedded resources. Export PNG from dedicated browser-rendered main/branch/subflow diagrams followed by complete node notes and graph description/constraints, independent of viewport or current inspector selection.
 
 ## State
 
@@ -90,3 +90,7 @@ Each subcommand accepts `--project PATH` (defaults cwd), where applicable:
 - `stop`: gracefully shut down ONLY the matching project's server, without killing an unrelated PID. Implement via authenticated endpoint if appropriate (backend-only /api/shutdown).
 
 CLI reads/wait/export/revise use the same confined Store and cross-process transaction lock as HTTP, and work without a running renderer/server. Startup/creation/shutdown use authenticated server coordination. CLI JSON output must not leak credentials into artifacts or log files. Browser PNG generation is required for submit/approve/checkpoint; initial/agent_revision/restore snapshots may lack PNG because no renderer is running. Browser failure to produce PNG means no handoff/approval and preserves draft.
+
+## Version 2 presentation
+
+Graph v2 adds node summaries, main/support/exception roles on nodes and edges, and validated hierarchical loop/subflow/branch groups. The exact format is maintained in [the graph schema](../skills/diagram-plan/references/graph-schema.md). HTTP task states, revision/request checks, immutable snapshots and PNG limits remain unchanged. Validation and derived Markdown support both graph versions. Read-only UI preferences remain separate from canonical data.
