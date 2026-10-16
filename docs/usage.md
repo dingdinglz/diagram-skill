@@ -39,13 +39,13 @@ Reload skills or restart your agent as required by its host, then explicitly ask
 
 ## Working in the canvas
 
-Add nodes from the left toolbar. Drag from a node's connection point to another node to draw an arrow. Select a node to edit its title, type, execution responsibility, and notes. Select an arrow to label a branch condition.
+Add nodes from the left toolbar. Drag from a node's connection point to another node to draw an arrow. Select a node to read its details, then choose **编辑节点** to edit its title, type, execution responsibility, and notes. Select an arrow to label a branch condition.
 
-Notes support Markdown paragraphs, lists, field tables, and fenced code. Use the inspector for details or expand a card on the canvas. Raw HTML and embedded images are not supported.
+Notes support Markdown paragraphs, lists, field tables, and fenced code in the fixed right inspector. Raw HTML and embedded images are not supported.
 
-Expanding notes opens a scrollable floating panel beside the node. The node's size, connection points, edge paths, and canvas view stay in place. Close the panel with its close button or the node's toggle. Viewing notes does not save a draft, change the task revision, or enter undo/redo history. Content edits and autosave preserve the current view; switching tasks or historical versions resets it to that graph's saved defaults. PNG exports always include all notes.
+Reading notes or opening a branch keeps the node's size, connection points, edge paths, and canvas view in place. Viewing does not save a draft, change the task revision, or enter undo/redo history. Content edits and autosave preserve the current view; switching tasks or historical versions resets it to that graph's saved defaults. PNG exports always include all notes.
 
-![Node details in a floating panel with the diagram layout preserved](images/note-details.png)
+![Node details in the fixed right inspector](images/note-details.png)
 
 Undo and redo work within the current editing session. Auto-layout only runs when you choose it. Before approving, give each decision at least two outgoing branches and label the conditions.
 
@@ -127,3 +127,25 @@ The Python server binds to loopback and serves the bundled assets locally. It us
 - **Browser won't open:** use the exact URL returned by `start` or `create`. A browser on another machine cannot use the same localhost URL.
 
 For command options, see the [CLI reference](../skills/diagram-plan/references/cli.md). The [history reference](../skills/diagram-plan/references/history.md) describes the revision and approval rules in more detail.
+
+## Main flow, loops and reading details
+
+New v2 plans distinguish the main flow from secondary and exception paths. Actual loop steps sit around a circle, and nested loops remain visible. Smaller loops can sit outside larger ones and touch at a shared card. Logical nesting does not require one circle to contain the other. An ordinary subflow card opens its internal diagram in the right inspector; a branch button opens the relevant alternate path with its entry and outcome. The display toggle in the existing canvas toolbar shows secondary paths without saving a change.
+
+![Nested loops touching at one shared card](images/tangent-loops.png)
+
+![Circular main flow with a subflow in the fixed inspector](images/circular-flow.png)
+
+Cards use a title and short summary. Click a card to read complete Markdown notes in the fixed right inspector; choose **编辑节点** to change content. Reading, scrolling, branch navigation and display toggles do not create revisions or use undo/redo history. The default program label is omitted from repeated cards; the inspector retains executor information.
+
+The existing sidebar and toolbar locations remain. The palette is unchanged; typography, card boundaries and selection styling are refined. Complete PNG exports contain the main diagram, separate branch/subflow diagrams, full notes and every edge condition.
+
+In **编辑节点**, change **显示分类** to correct the main/support/exception classification. A node can belong to several groups; under **所属分组**, choose **移出** for the membership to remove. Removing membership in a parent also removes membership in its descendants. The node and its connections remain. Dragging a shared card moves only that card; **整理布局** arranges the loops again. Deleting or reconnecting a required loop edge changes that group to a subflow so the diagram no longer claims a closed cycle. New group definitions and circular order are authored through Graph v2 and agent revisions.
+
+Drag from any point on a card's outline to create a connection. Select a connection to move either endpoint along a card's outline or to another card. These edits save precise endpoint positions and support undo/redo. Automatic loop endpoints follow the circle where it meets each rounded card.
+
+Selecting a connection also offers **显示分类**: main paths use bold solid lines, support paths use fine solid lines, and exception paths use fine dashed lines. Main loop connections receive extra weight. The editor, right-side diagrams and PNG export share these styles; agents select them through `edge.role` and loop groups.
+
+V1 tasks and immutable history remain usable. Upgrade a selected copy when reorganizing an old diagram; do not migrate every stored task just to read it. The agent follows the bundled [writing guide](../skills/diagram-plan/references/writing.md) and can apply an installed humanizer skill. The browser needs no model connection or additional skill installation.
+
+After updating the skill's Python scripts, restart that project's diagram server with the CLI's `stop` and `start` commands. Open the URL returned by `start` to authenticate the new session. Refreshing a page loads new web assets but does not reload a running Python server.

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 2,
+  "title": "逐轮处理与重试",
+  "description": "主循环与内部重试共享一次结果检查。两条循环在同一张检查卡片处相接。",
+  "constraints": "共享步骤只保留一个节点。每条箭头对应真实的执行关系。",
+  "nodes": [
+    { "id": "choose", "type": "step", "position": { "x": 296, "y": 102 }, "data": { "label": "选择本轮任务", "summary": "取出下一项待处理的任务", "notes": "每轮选择一个任务，再检查它的处理结果。", "executor": "program", "expanded": false, "role": "main" } },
+    { "id": "shared", "type": "decision", "position": { "x": 503.8460969082653, "y": 462 }, "data": { "label": "检查处理结果", "summary": "成功后完成本轮，失败则重试", "notes": "主循环和重试循环经过同一个检查步骤。重试完成后回到这里重新判断。", "executor": "program", "expanded": false, "role": "main" } },
+    { "id": "finish", "type": "step", "position": { "x": 88.15390309173472, "y": 462 }, "data": { "label": "完成本轮", "summary": "记录结果并继续下一轮", "notes": "记录本轮完成状态，然后选择下一项任务。", "executor": "program", "expanded": false, "role": "main" } },
+    { "id": "retry", "type": "step", "position": { "x": 919.5382907247958, "y": 462 }, "data": { "label": "重新处理任务", "summary": "再次执行当前任务", "notes": "沿用当前任务的输入进行重试。", "executor": "program", "expanded": false, "role": "main" } },
+    { "id": "check", "type": "step", "position": { "x": 711.6921938165306, "y": 822 }, "data": { "label": "收集重试结果", "summary": "将本次结果交回检查步骤", "notes": "保留重试结果，返回共享的检查步骤。", "executor": "program", "expanded": false, "role": "main" } }
+  ],
+  "edges": [
+    { "id": "picked", "source": "choose", "target": "shared", "role": "main" },
+    { "id": "accepted", "source": "shared", "target": "finish", "label": "处理成功", "role": "main" },
+    { "id": "next", "source": "finish", "target": "choose", "label": "继续下一轮", "role": "main" },
+    { "id": "retry-needed", "source": "shared", "target": "retry", "label": "需要重试", "role": "main" },
+    { "id": "retried", "source": "retry", "target": "check", "role": "main" },
+    { "id": "checked", "source": "check", "target": "shared", "label": "重新检查", "role": "main" }
+  ],
+  "groups": [
+    { "id": "main-loop", "kind": "loop", "label": "逐轮处理", "summary": "完成一项任务后继续下一轮。", "parentId": null, "nodeIds": ["choose", "shared", "finish", "retry", "check"], "order": ["choose", "shared", "finish"], "position": { "x": 112, "y": 92 }, "circle": { "x": 420, "y": 400, "radius": 240 } },
+    { "id": "retry-loop", "kind": "loop", "label": "内部重试", "summary": "重试后回到同一个检查步骤。", "parentId": "main-loop", "nodeIds": ["shared", "retry", "check"], "order": ["shared", "retry", "check"], "position": { "x": 527.6921938165306, "y": 332 }, "circle": { "x": 835.6921938165306, "y": 640, "radius": 240 } }
+  ]
+}

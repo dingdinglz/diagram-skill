@@ -1,10 +1,13 @@
 export type NodeKind = 'start' | 'step' | 'decision' | 'end';
 export type Executor = 'program' | 'llm' | 'human';
+export type FlowRole = 'main' | 'support' | 'exception';
 export type NodeData = {
   label: string;
   notes: string;
   executor: Executor;
   expanded: boolean;
+  summary?: string;
+  role?: FlowRole;
   [key: string]: unknown;
 };
 export interface GraphNode {
@@ -20,14 +23,29 @@ export interface GraphEdge {
   label?: string;
   sourceHandle?: string | null;
   targetHandle?: string | null;
+  role?: FlowRole;
+  sourceAnchor?: { x: number; y: number };
+  targetAnchor?: { x: number; y: number };
+}
+export interface GraphGroup {
+  id: string;
+  label: string;
+  summary: string;
+  kind: 'loop' | 'subflow' | 'branch';
+  parentId: string | null;
+  nodeIds: string[];
+  order: string[];
+  position: { x: number; y: number };
+  circle?: { x: number; y: number; radius: number };
 }
 export interface Graph {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
   title: string;
   description: string;
   constraints: string;
   nodes: GraphNode[];
   edges: GraphEdge[];
+  groups?: GraphGroup[];
 }
 export type Status = 'draft' | 'awaiting_agent' | 'approved' | 'cancelled';
 export interface Version {

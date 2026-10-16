@@ -16,7 +16,7 @@ Manual mode starts blank. Do not insert this example or silently replace the use
 
 ## Labels, conditions, and notes
 
-Use short verb phrases for actions and a concrete question for a decision. A label such as “Handle request” is usually too vague if several different outcomes matter. Start and end labels should identify the triggering event and final outcome.
+Use short verb phrases for actions and a concrete question for a decision. Add a short summary that explains the action instead of repeating its title. Follow [writing.md](writing.md) for plain-language notes and optional humanizer review. Start and end labels should identify the triggering event and final outcome.
 
 Each decision needs at least two outgoing, condition-labelled edges before approval. State “valid / invalid”, “found / missing”, or actual thresholds instead of unexplained colors. Give failure branches a destination. A loop must say when it repeats and when it stops.
 
@@ -40,14 +40,24 @@ Notes should supply only useful implementation context:
 
 Put task-wide scope and acceptance criteria in graph `description`/`constraints`; put local rules on the relevant node. Keep examples synthetic. A fenced code block is documentation, not an instruction to execute it.
 
+## Main flow and grouped views
+
+Graph v2 explicitly marks node and edge roles. Use `main` for the principal behavior, `support` for secondary work and `exception` for failure handling. Roles describe relevance in this plan, not whether the operation is optional at runtime. Meaningful decisions and externally visible alternate outcomes must still be apparent from the main flow. Do not classify by matching words such as “error” in labels.
+
+The main view keeps primary loops and their nested loops visible, shows ordinary subflows as cards, and exposes omitted outgoing paths through branch buttons. The right inspector opens subflow and branch diagrams with their real entry and exit connections. Complete exports include these diagrams and all original data.
+
+Use `subflow` groups for complicated internal behavior and `branch` groups for secondary paths. Nested groups explicitly declare their parent; this does not require visual containment. Peer groups may share a real node. Reuse its ID so it remains one card with one position. Groups reference original nodes; they do not add execution steps or new edges.
+
 ## Initial layout
 
-1. Use a top-to-bottom main path and align its nodes around one column.
-2. Place alternative/error paths in a separate side column. Use side handles (`left`/`right`, `left-in`/`right-in`) when they clarify routing.
-3. For collapsed nodes, start with roughly 160–190px between node tops (around 210px after a decision), and 350–420px between branch columns. Do not reserve the full note height in the main flow: export puts complete notes in a separate, nonoverlapping appendix. If the user expands notes on the canvas, they may explicitly rearrange the layout.
-4. Set `expanded: false` for new nodes initially. Do not remove notes to make a graph appear smaller.
-5. Avoid crossing an unrelated node or obscuring edge labels. Inspect the browser-rendered PNG to catch clipping, overlaps, and unreadable text.
-6. If the graph becomes unwieldy, ask to narrow the reviewed behavior rather than hiding critical branches or reducing text to an unreadable scale.
+1. Align the main path top-down. Cards are 248 × 116 pixels; leave roughly 100 pixels between ordinary rows and enough space for condition labels.
+2. For a real loop, place the nodes on its closed route around a circle, with text upright. The `order` can include real shared nodes or nonoverlapping child-group slots. Each step around the ring must follow an existing edge, including the closing edge. A group of mutually reachable nodes is not by itself a valid circular ordering.
+3. A useful starting radius is `max(205, 328 / (2 * sin(pi / max(3, item_count))))`. Place card centers at angles starting at `-pi/2`, advancing clockwise. Card top-left coordinates subtract `(124, 58)` from each center. Put entrances and exits outside the ring.
+4. Place a nested loop outside or alongside its parent. If the loops share one real node, place that card at the external tangency. Preserve separate entry and exit nodes when the behavior requires them. Multiple shared nodes may prevent exact tangency; keep each card once and favor clear connections. Keep parallel work inside an appropriate subflow with its real branch relationships.
+5. Place secondary paths away from the main path so the “show branches” view can display them without moving surviving nodes. Set `expanded: false`; note reading is local UI state and does not change card size or positions.
+6. Inspect the browser-rendered full PNG. Check card bounds, condition labels, arrow directions and coverage of all branches. Do not remove notes or meaningful failures to shrink the image.
+
+When generating circular coordinates, save the matching `group.circle` center and radius. Leave edge anchors absent to use automatic circle intersections. Set `sourceAnchor` or `targetAnchor` only when a particular point on the card outline improves the route; all outline positions are available. Preserve manually adjusted anchors on later revisions.
 
 The initial coordinates are a starting point for a person to edit, not a layout constraint imposed on later revisions. Do not silently auto-layout a graph the user has rearranged. Preserve unchanged node/edge IDs, positions, connections, notes, and expansion state; make the smallest changes consistent with feedback. If a revision needs broad restructuring, explain why and obtain agreement.
 

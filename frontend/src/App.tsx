@@ -1,17 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, MiniMap, MarkerType, useReactFlow, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, MiniMap, ViewportPortal, useReactFlow, getViewportForBounds, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
 import { ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, Check, CheckCheck, ChevronRight, CircleDot, Clock3, Code2, Diamond, FileJson, Flag, GitBranch, History, Layers2, LayoutGrid, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Square, Trash2, Undo2, X, AlertCircle, Pause, LockKeyhole, Image, FileText, FolderOpen } from 'lucide-react';
-import FlowNode, { type CanvasNode } from './FlowNode';
+import FlowNode, { LoopArea, type CanvasNode } from './FlowNode';
+import { FlowEdge, type RoutedEdge } from './FlowEdge';
+import { moveItem, groupsOf, upgradeGraph, NODE_WIDTH, NODE_HEIGHT, type ViewScope } from './views';
+import { createRootScene, nodePorts } from './geometry';
+import { closestOutlinePoint, containsRounded, outlineAnchor, projectAnchor, type Point } from './anchors';
+import { NodeInspector } from './NodeInspector';
 import { Markdown } from './Markdown';
 import { useWorkspace } from './useWorkspace';
 import { api, downloadArtifact, hasToken } from './api';
-import { approvalIssues, createNode, graphWarnings, layoutGraph, newId, removeNodes } from './model';
+import { approvalIssues, createNode, graphWarnings, layoutGraph, newId, removeNodes, removeEdges, reconnectGraphEdge } from './model';
 import type { Graph, GraphNode, HistoricalVersion, NodeKind, Executor } from './types';
 import { KIND_LABELS, EXECUTOR_LABELS, STATUS_LABELS, VERSION_LABELS } from './types';
 
-const nodeTypes = { start: FlowNode, step: FlowNode, decision: FlowNode, end: FlowNode };
+const nodeTypes = { start: FlowNode, step: FlowNode, decision: FlowNode, end: FlowNode, 'loop-area': LoopArea };
+const edgeTypes = { routed: FlowEdge };
 const palette = [{ type: 'start', Icon: CircleDot, hint: '入口或触发' }, { type: 'step', Icon: Square, hint: '一个明确动作' }, { type: 'decision', Icon: Diamond, hint: '标明分支条件' }, { type: 'end', Icon: Flag, hint: '结果或终点' }] as const;
 const time = (iso: string) => new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+type ConnectionEnd = { nodeId: string; anchor: Point };
+type ConnectionDrag = { pointerId: number; initialClient: Point; fixed: Point; pointer: Point; from: ConnectionEnd; edgeId?: string; endpoint?: 'source' | 'target'; candidate?: ConnectionEnd };
 
 function Workspace() {
   const ws = useWorkspace();
@@ -22,12 +30,16 @@ function Workspace() {
   const [panel, setPanel] = useState<'details' | 'history'>('details');
   const [panelOpen, setPanelOpen] = useState(true);
   const [historical, setHistorical] = useState<HistoricalVersion | null>(null);
-  const [viewExpansions, setViewExpansions] = useState<Record<string, boolean>>({});
+  const [showBranches, setShowBranches] = useState(false);
+  const [detailScope, setDetailScope] = useState<ViewScope | undefined>();
   const [dialog, setDialog] = useState<'new' | 'feedback' | 'approve' | 'cancel' | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [feedback, setFeedback] = useState('');
   const [versionLoading, setVersionLoading] = useState(false);
   const [nodeMeasurements, setNodeMeasurements] = useState<Record<string, { width: number; height: number }>>({});
+  const [connectionDrag, setConnectionDrag] = useState<ConnectionDrag | null>(null);
+  const connectionDragRef = useRef<ConnectionDrag | null>(null);
+  const suppressCanvasClick = useRef(false);
   const displayGraph = historical?.graph || ws.graph;
   const editable = ws.editable && !historical;
   const selectedNode = displayGraph.nodes.find(n => n.id === selectedNodeId);
@@ -36,22 +48,106 @@ function Workspace() {
   const warnings = graphWarnings(displayGraph);
 
   useEffect(() => {
-    setSelectedNodeId(null); setSelectedEdgeId(null); setHistorical(null); setViewExpansions({});
+    setSelectedNodeId(null); setSelectedEdgeId(null); setHistorical(null); setShowBranches(false); setDetailScope(undefined);
   }, [ws.task?.id]);
-  useEffect(() => { setViewExpansions({}); }, [historical?.id]);
-  const updateNode = (patch: Partial<GraphNode['data']>) => {
-    if (selectedNode) ws.edit({ ...ws.graph, nodes: ws.graph.nodes.map(n => n.id === selectedNode.id ? { ...n, data: { ...n.data, ...patch } } : n) });
+  useEffect(() => { setDetailScope(undefined); setShowBranches(false); }, [historical?.id]);
+  const scene = useMemo(() => createRootScene(displayGraph, showBranches, nodeMeasurements), [displayGraph, showBranches, nodeMeasurements]);
+  const fittedView = useRef('');
+  useEffect(() => {
+    const key = `${ws.task?.id || ''}:${historical?.id || 'current'}`;
+    if (!ws.task || fittedView.current === key) return;
+    const frame = requestAnimationFrame(() => {
+      const box = canvas.current?.getBoundingClientRect();
+      if (!box?.width || !box.height) return;
+      fittedView.current = key;
+      // Initialize from the projected scene, including groups. The provider may
+      // still hold the previous task's measured nodes during a task switch.
+      void flow.setViewport(getViewportForBounds(scene.bounds, box.width, box.height, .15, 1, .16));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [ws.task?.id, historical?.id, scene.bounds, flow]);
+  const view = scene.view;
+  const openDetails = useCallback((id: string, scope?: ViewScope) => {
+    setSelectedNodeId(id); setSelectedEdgeId(null); setDetailScope(scope); setPanel('details'); setPanelOpen(true);
+  }, []);
+  const setConnectionPreview = useCallback((next: ConnectionDrag | null) => {
+    connectionDragRef.current = next; setConnectionDrag(next);
+  }, []);
+  useEffect(() => { setConnectionPreview(null); }, [ws.task?.id, historical?.id, editable, setConnectionPreview]);
+  const beginOutlineConnection = useCallback((event: ReactPointerEvent<SVGRectElement>, nodeId: string) => {
+    if (!editable || event.button !== 0 || !scene.rects[nodeId]) return;
+    event.preventDefault(); event.stopPropagation();
+    const pointer = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    const anchor = outlineAnchor(scene.rects[nodeId], pointer);
+    setConnectionPreview({ pointerId: event.pointerId, initialClient: { x: event.clientX, y: event.clientY }, fixed: projectAnchor(scene.rects[nodeId], anchor), pointer, from: { nodeId, anchor } });
+  }, [editable, scene.rects, flow, setConnectionPreview]);
+  const beginEndpointMove = (event: ReactPointerEvent<SVGCircleElement>, endpoint: 'source' | 'target') => {
+    const geometry = scene.edges.find(e => e.edge.id === selectedEdgeId);
+    if (!editable || event.button !== 0 || !geometry) return;
+    event.preventDefault(); event.stopPropagation();
+    const nodeId = geometry.edge[endpoint], anchor = outlineAnchor(scene.rects[nodeId], geometry[endpoint]);
+    setConnectionPreview({ pointerId: event.pointerId, initialClient: { x: event.clientX, y: event.clientY }, fixed: geometry[endpoint === 'source' ? 'target' : 'source'], pointer: geometry[endpoint], from: { nodeId, anchor }, edgeId: geometry.edge.id, endpoint });
   };
-  const toggleNode = useCallback((id: string) => {
-    // Reading notes is local view state, independent of edits and undo/redo.
-    setViewExpansions(previous => ({ ...previous, [id]: !(previous[id] ?? displayGraph.nodes.find(n => n.id === id)?.data.expanded) }));
-  }, [displayGraph.nodes]);
-  const nodes = useMemo<CanvasNode[]>(() => displayGraph.nodes.map(node => ({ ...node, measured: nodeMeasurements[node.id], selected: node.id === selectedNodeId, data: { ...node.data, expanded: viewExpansions[node.id] ?? node.data.expanded, onToggle: toggleNode } })), [displayGraph.nodes, selectedNodeId, toggleNode, viewExpansions, nodeMeasurements]);
-  const edges = useMemo(() => displayGraph.edges.map(edge => {
-    const llm = displayGraph.nodes.find(n => n.id === edge.source)?.data.executor === 'llm';
-    const color = edge.id === selectedEdgeId ? '#bf793e' : llm ? '#6183a0' : '#829088';
-    return { ...edge, type: 'smoothstep', selected: edge.id === selectedEdgeId, style: { stroke: color, strokeWidth: edge.id === selectedEdgeId ? 2.5 : 1.65 }, markerEnd: { type: MarkerType.ArrowClosed, color, width: 19, height: 19 }, labelStyle: { fontSize: 12, fill: '#4b574f', fontWeight: 500 }, labelBgStyle: { fill: '#f8f7f3', fillOpacity: 1 }, labelBgPadding: [8, 5] as [number, number], labelBgBorderRadius: 5 };
-  }), [displayGraph, selectedEdgeId]);
+  useEffect(() => {
+    const candidateAt = (point: Point): ConnectionEnd | undefined => {
+      const candidates = scene.view.nodes.filter(n => !n.groupId && ws.graph.nodes.some(real => real.id === n.id)).map(n => {
+        const rect = scene.rects[n.id], projected = closestOutlinePoint(rect, point);
+        return { nodeId: n.id, anchor: outlineAnchor(rect, point), distance: Math.hypot(projected.x - point.x, projected.y - point.y), inside: containsRounded(rect, point) };
+      }).filter(candidate => candidate.inside || candidate.distance <= 14 / flow.getZoom()).sort((a, b) => a.distance - b.distance);
+      return candidates[0];
+    };
+    const move = (event: PointerEvent) => {
+      const drag = connectionDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      event.preventDefault();
+      const pointer = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      setConnectionPreview({ ...drag, pointer, candidate: candidateAt(pointer) });
+    };
+    const end = (event: PointerEvent) => {
+      const drag = connectionDragRef.current;
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const moved = Math.hypot(event.clientX - drag.initialClient.x, event.clientY - drag.initialClient.y) >= 4;
+      const candidate = candidateAt(flow.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+      setConnectionPreview(null);
+      if (moved) { suppressCanvasClick.current = true; window.setTimeout(() => { suppressCanvasClick.current = false; }, 0); }
+      if (!moved || !candidate || !editable) return;
+      const graph = upgradeGraph(ws.graph);
+      let edgeId = drag.edgeId;
+      if (edgeId && drag.endpoint) {
+        const endpoint = drag.endpoint;
+        ws.edit(reconnectGraphEdge(graph, edgeId, endpoint, candidate.nodeId, candidate.anchor));
+      } else {
+        edgeId = newId('edge');
+        ws.edit({ ...graph, edges: [...graph.edges, { id: edgeId, source: drag.from.nodeId, target: candidate.nodeId, sourceAnchor: drag.from.anchor, targetAnchor: candidate.anchor, sourceHandle: 'bottom', targetHandle: 'top', label: '', role: 'main' }] });
+      }
+      setSelectedEdgeId(edgeId); setSelectedNodeId(null); setPanel('details'); setPanelOpen(true);
+    };
+    const cancel = () => setConnectionPreview(null);
+    const key = (event: KeyboardEvent) => { if (event.key === 'Escape') cancel(); };
+    window.addEventListener('pointermove', move, { passive: false });
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', key);
+    window.addEventListener('blur', cancel);
+    return () => {
+      window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', cancel); window.removeEventListener('keydown', key); window.removeEventListener('blur', cancel);
+    };
+  }, [editable, scene, ws.graph, ws.edit, flow, setConnectionPreview]);
+  const nodes = useMemo<CanvasNode[]>(() => [
+    ...scene.loops.map(loop => ({ id: `loop-area:${loop.id}`, type: 'loop-area' as const,
+      position: { x: loop.center.x-loop.radius-48, y: loop.center.y-loop.radius-48 },
+      width: 2*(loop.radius+48), height: 2*(loop.radius+48),
+      selectable: false, draggable: false, connectable: false, zIndex: -1,
+      data: { label: loop.label, notes: '', executor: 'program' as const, expanded: false, loopRadius: loop.radius+48, onGroup: () => openDetails(loop.id, {groupId:loop.id}) } })),
+    ...view.nodes.map(node => ({ ...node, width: NODE_WIDTH, height: NODE_HEIGHT, measured: nodeMeasurements[node.id], selected: node.id === selectedNodeId, connectable: editable && !node.groupId,
+      data: { ...node.data, groupId: node.groupId, ports: nodePorts(node, scene), branchCount: view.branches[node.id]?.length || 0, exceptionsOnly: view.branches[node.id]?.every(b=>b.exception),
+        onOutlineStart: beginOutlineConnection, onBranches: () => openDetails(node.id, {branchEdgeId:view.branches[node.id]?.[0]?.edgeId}),
+        onGroup: node.groupId ? () => openDetails(node.id, {groupId:node.groupId}) : undefined } }))
+  ], [view, scene, selectedNodeId, nodeMeasurements, editable, openDetails, beginOutlineConnection]);
+  const edges = useMemo<RoutedEdge[]>(() => scene.edges.map(geometry => ({ ...geometry.edge, type: 'routed',
+    sourceHandle: `out:${geometry.edge.id}`, targetHandle: `in:${geometry.edge.id}`, selected: geometry.edge.id === selectedEdgeId,
+    data: { geometry } })), [scene, selectedEdgeId]);
   const onNodesChange = useCallback((changes: NodeChange<CanvasNode>[]) => {
     const dimensions = changes.filter(change => change.type === 'dimensions');
     if (dimensions.length) setNodeMeasurements(previous => {
@@ -68,18 +164,21 @@ function Workspace() {
     const removed = changes.filter(c => c.type === 'remove').map(c => c.id);
     if (removed.length) graph = removeNodes(graph, removed);
     changes.forEach(change => {
-      if (change.type === 'position' && change.position) graph = { ...graph, nodes: graph.nodes.map(n => n.id === change.id ? { ...n, position: change.position! } : n) };
+      if (change.type === 'position' && change.position) graph = moveItem(graph, change.id, change.position);
     });
     if (graph !== ws.graph) ws.edit(graph, removed.length > 0);
   }, [editable, ws.graph, ws.edit]);
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     if (!editable) return;
     const removed = changes.filter(c => c.type === 'remove').map(c => c.id);
-    if (removed.length) ws.edit({ ...ws.graph, edges: ws.graph.edges.filter(e => !removed.includes(e.id)) });
+    if (removed.length) ws.edit(removeEdges(ws.graph, removed));
   }, [editable, ws.graph, ws.edit]);
   const connect = useCallback((connection: Connection) => {
-    if (!editable || !connection.source || !connection.target) return;
-    const edge = { id: newId('edge'), ...connection, label: '' };
+    if (!editable || !connection.source || !connection.target || !ws.graph.nodes.some(n => n.id === connection.source) || !ws.graph.nodes.some(n => n.id === connection.target)) return;
+    const edge = { id: newId('edge'), source: connection.source, target: connection.target,
+      sourceHandle: ['bottom', 'left', 'right'].includes(connection.sourceHandle || '') ? connection.sourceHandle : 'bottom',
+      targetHandle: ['top', 'left-in', 'right-in'].includes(connection.targetHandle || '') ? connection.targetHandle : 'top',
+      label: '', ...(ws.graph.schemaVersion === 2 ? { role: 'main' as const } : {}) };
     ws.edit({ ...ws.graph, edges: [...ws.graph.edges, edge] });
     setSelectedEdgeId(edge.id); setSelectedNodeId(null); setPanel('details'); setPanelOpen(true);
   }, [editable, ws.graph, ws.edit]);
@@ -94,7 +193,7 @@ function Workspace() {
   const deleteSelection = () => {
     if (!editable) return;
     if (selectedNodeId) { ws.edit(removeNodes(ws.graph, [selectedNodeId])); setSelectedNodeId(null); }
-    else if (selectedEdgeId) { ws.edit({ ...ws.graph, edges: ws.graph.edges.filter(e => e.id !== selectedEdgeId) }); setSelectedEdgeId(null); }
+    else if (selectedEdgeId) { ws.edit(removeEdges(ws.graph, [selectedEdgeId])); setSelectedEdgeId(null); }
   };
   const autoLayout = () => {
     if (!editable) return;
@@ -144,7 +243,7 @@ function Workspace() {
       <div className="node-palette">
         <div className="sidebar-section-label">绘图工具 <MousePointer2 size={12} /></div>
         {palette.map(({ type, Icon, hint }) => <button key={type} className="palette-button" disabled={!editable} onClick={() => addNode(type)} aria-label={`添加${KIND_LABELS[type]}`}><span className={`palette-icon palette-${type}`}><Icon size={17} /></span><span>{KIND_LABELS[type]}<small>{hint}</small></span><Plus size={13} /></button>)}
-        <p className="palette-tip">从节点的连接点拖出箭头。<br />点击节点或连线，编辑含义。</p>
+        <p className="palette-tip">从卡片边缘任意位置拖出箭头。<br />选中连线后，可拖动两端。</p>
       </div>
       <div className="sidebar-footer"><ShieldCheck size={15} /><span>只在你的电脑上<small>本地文件 · 无模型密钥</small></span></div>
     </aside>
@@ -172,21 +271,36 @@ function Workspace() {
             <button className="icon-button" title="撤销 ⌘/Ctrl Z" aria-label="撤销" onClick={ws.undo} disabled={!editable || !ws.canUndo}><Undo2 size={17} /></button>
             <button className="icon-button" title="重做 ⌘/Ctrl Shift Z" aria-label="重做" onClick={ws.redo} disabled={!editable || !ws.canRedo}><Redo2 size={17} /></button>
             <span className="toolbar-divider" />
+            {displayGraph.schemaVersion === 2 && <div className="view-switch" aria-label="流程显示范围"><button aria-pressed={!showBranches} onClick={() => setShowBranches(false)}>主线</button><button aria-pressed={showBranches} onClick={() => setShowBranches(true)}>显示分支</button></div>}
             <button className="toolbar-text-button" onClick={autoLayout} disabled={!editable || !displayGraph.nodes.length}><LayoutGrid size={15} />整理布局</button>
             <span className="toolbar-divider" />
             <button className="icon-button" aria-label="适应画布" title="适应画布" onClick={() => void flow.fitView({ padding: .2, maxZoom: 1, duration: 250 })}><Maximize size={16} /></button>
             <button className="icon-button" aria-label="导出完整 PNG" title="导出完整 PNG（含所有说明）" onClick={() => void ws.exportPng()} disabled={!!ws.busy || !!historical || !displayGraph.nodes.length}><ArrowDownToLine size={17} /></button>
           </div>}
-          <ReactFlow<CanvasNode> key={`${ws.task?.id || 'empty'}-${historical?.id || 'current'}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+          <ReactFlow<CanvasNode, RoutedEdge> key={`${ws.task?.id || 'empty'}-${historical?.id || 'current'}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect}
-            onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); setPanel('details'); setPanelOpen(true); }}
-            onNodeDoubleClick={(_, node) => { setSelectedNodeId(node.id); setPanel('details'); setPanelOpen(true); setTimeout(() => document.getElementById('node-label')?.focus(), 50); }}
+            onNodeClick={(_, node) => { if (!suppressCanvasClick.current && node.type !== 'loop-area') openDetails(node.id); }}
+            onNodeDoubleClick={(_, node) => { if (node.type !== 'loop-area') openDetails(node.id); }}
             onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); setPanel('details'); setPanelOpen(true); }}
-            onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); }}
+            onPaneClick={() => { if (!suppressCanvasClick.current) { setSelectedNodeId(null); setSelectedEdgeId(null); } }}
             onNodeDragStart={ws.beginDrag} onNodeDragStop={ws.endDrag}
-            nodesDraggable={editable} nodesConnectable={editable} elementsSelectable={!ws.busy} deleteKeyCode={null} minZoom={.15} maxZoom={1.7}
-            fitView fitViewOptions={{ padding: .16, maxZoom: 1 }} proOptions={{ hideAttribution: true }} panOnScroll selectionOnDrag={false} zoomOnDoubleClick={false} aria-label="流程图画布">
+            nodesDraggable={editable && !connectionDrag} nodesConnectable={editable} elementsSelectable={!ws.busy} deleteKeyCode={null} minZoom={.15} maxZoom={1.7}
+            proOptions={{ hideAttribution: true }} panOnScroll selectionOnDrag={false} zoomOnDoubleClick={false} aria-label="流程图画布">
             <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#d7dbd4" />
+            <ViewportPortal><svg className="connection-edit-overlay" width={1} height={1}>
+              {editable && selectedEdgeId && scene.edges.filter(e => e.edge.id === selectedEdgeId && e.edge.source === selectedEdge?.source && e.edge.target === selectedEdge?.target).map(geometry => <g key={geometry.edge.id}>
+                {(['source', 'target'] as const).map(endpoint => <circle key={endpoint} className="connection-endpoint nodrag nopan" data-edge-id={geometry.edge.id} data-anchor-end={endpoint} cx={geometry[endpoint].x} cy={geometry[endpoint].y} r={7}
+                  onPointerDown={event => beginEndpointMove(event, endpoint)}><title>{endpoint === 'source' ? '拖动连线起点' : '拖动连线终点'}</title></circle>)}
+              </g>)}
+              {connectionDrag && (() => {
+                const tip = connectionDrag.candidate ? projectAnchor(scene.rects[connectionDrag.candidate.nodeId], connectionDrag.candidate.anchor) : connectionDrag.pointer;
+                const source = connectionDrag.endpoint === 'source' ? tip : connectionDrag.fixed, target = connectionDrag.endpoint === 'source' ? connectionDrag.fixed : tip;
+                return <g><defs><marker id="connection-preview-arrow" viewBox="0 0 10 10" refX={9} refY={5} markerWidth={6} markerHeight={6} orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#648160" /></marker></defs>
+                  <path className="connection-preview" d={`M${source.x},${source.y} L${target.x},${target.y}`} markerEnd="url(#connection-preview-arrow)" />
+                  <circle className={`connection-drop-point ${connectionDrag.candidate ? 'valid' : ''}`} cx={tip.x} cy={tip.y} r={7} />
+                </g>;
+              })()}
+            </svg></ViewportPortal>
             {!!displayGraph.nodes.length && <><Controls showInteractive={false} position="bottom-right" /><MiniMap position="bottom-left" pannable zoomable nodeColor={node => node.type === 'decision' ? '#e6cba1' : '#ccdcd1'} maskColor="rgba(248,247,243,.65)" /></>}
           </ReactFlow>
           {!displayGraph.nodes.length && <div className="empty-canvas">
@@ -202,7 +316,7 @@ function Workspace() {
         </div>
 
         {panelOpen && <aside className="inspector">
-          <div className="inspector-tabs"><button className={panel === 'details' ? 'active' : ''} onClick={() => setPanel('details')}><Layers2 size={14} />{selectedNode ? '节点详情' : selectedEdge ? '连线详情' : '流程说明'}</button><button className={panel === 'history' ? 'active' : ''} onClick={() => setPanel('history')}><History size={14} />版本历史</button></div>
+          <div className="inspector-tabs"><button className={panel === 'details' ? 'active' : ''} onClick={() => setPanel('details')}><Layers2 size={14} />{selectedNodeId ? '节点详情' : selectedEdge ? '连线详情' : '流程说明'}</button><button className={panel === 'history' ? 'active' : ''} onClick={() => setPanel('history')}><History size={14} />版本历史</button></div>
           <div className="inspector-content">
             {panel === 'history' ? <>
               <div className="section-heading"><h2>每一次理解，都有迹可循</h2><p>自动保存草稿；在反馈、修订和确认时留下版本。旧版本不会被覆盖。</p></div>
@@ -211,21 +325,18 @@ function Workspace() {
                 <span className="history-pin">{version.kind === 'approve' || version.kind === 'approved' ? <Check size={12} /> : <span />}</span><span><strong>{VERSION_LABELS[version.kind] || version.kind}</strong><small>{version.id} · {time(version.createdAt)}</small>{!!version.feedback && <em>{version.feedback}</em>}</span><ChevronRight size={13} />
               </button>)}</div>
               {historical && <section className="history-actions"><h3>这个版本的文件</h3><div className="artifact-buttons"><button onClick={() => void downloadVersion('diagram.json')}><FileJson size={15} />JSON</button><button onClick={() => void downloadVersion('diagram.md')}><FileText size={15} />文字</button><button disabled={!historical.hasPng} onClick={() => void downloadVersion('diagram.png')}><Image size={15} />PNG</button></div>{!historical.hasPng && <p className="field-hint">此版本尚未经过浏览器提交，因此没有 PNG。</p>}<button className="button secondary full-width" disabled={!!ws.busy} onClick={() => void restoreVersion(historical.id)}><RotateCcw size={14} />恢复为新草稿</button><p className="field-hint">恢复不会修改历史，也不会自动暂停已开始的实现。</p></section>}
-            </> : selectedNode ? <>
-              <div className="selection-heading"><span className={`kind-badge kind-${selectedNode.type}`}>{KIND_LABELS[selectedNode.type]}</span><button className="icon-button danger" aria-label="删除选中节点" disabled={!editable} onClick={deleteSelection}><Trash2 size={15} /></button></div>
-              <label className="field-label" htmlFor="node-label">节点标题<span>一个节点，一个明确含义</span></label>
-              <textarea id="node-label" className="title-textarea" rows={3} value={selectedNode.data.label} maxLength={500} disabled={!editable} onChange={event => updateNode({ label: event.target.value })} />
-              <div className="field-row"><label>节点类型<select value={selectedNode.type} disabled={!editable} onChange={event => ws.edit({ ...ws.graph, nodes: ws.graph.nodes.map(n => n.id === selectedNode.id ? { ...n, type: event.target.value as NodeKind } : n) })}>{Object.entries(KIND_LABELS).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label><label>执行主体<select value={selectedNode.data.executor} disabled={!editable} onChange={event => updateNode({ executor: event.target.value as Executor })}>{Object.entries(EXECUTOR_LABELS).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</select></label></div>
-              <div className="field-divider" />
-              <label className="field-label" htmlFor="node-notes">说明卡片<span>输入输出、字段表、代码示例和约束</span></label>
-              <textarea id="node-notes" className="notes-textarea" rows={11} value={selectedNode.data.notes} disabled={!editable} placeholder={'支持 Markdown，例如：\n\n| 字段 | 含义 |\n| --- | --- |\n| id | 唯一标识 |\n\n```json\n{ "ok": true }\n```'} onChange={event => updateNode({ notes: event.target.value })} />
-              <p className="field-hint">无需把全部说明塞进标题。PNG 导出会包含完整卡片。</p>
-              {!!selectedNode.data.notes && <><button className="button subtle full-width" onClick={() => toggleNode(selectedNode.id)}>{(viewExpansions[selectedNode.id] ?? selectedNode.data.expanded) ? '在画布上收起说明' : '在画布上展开说明'}<ArrowDown size={13} /></button><div className="notes-preview"><span className="section-kicker">预览</span><Markdown text={selectedNode.data.notes} /></div></>}
-              <div className="node-identity">节点 ID <code>{selectedNode.id}</code></div>
-            </> : selectedEdge ? <>
+            </> : selectedNodeId && (selectedNode || groupsOf(displayGraph).some(g => g.id === selectedNodeId)) ? <NodeInspector
+              key={`${ws.task?.id}:${historical?.id}:${selectedNodeId}:${JSON.stringify(detailScope)}`} graph={displayGraph} selectedId={selectedNodeId}
+              initialScope={detailScope} editable={editable} onEdit={ws.edit} onDelete={deleteSelection} />
+            : selectedEdge ? <>
+
               <div className="selection-heading"><span className="kind-badge">流程连线</span><button className="icon-button danger" aria-label="删除选中连线" disabled={!editable} onClick={deleteSelection}><Trash2 size={15} /></button></div>
               <div className="edge-endpoints"><span>{displayGraph.nodes.find(n => n.id === selectedEdge.source)?.data.label}</span><ArrowDown size={16} /><span>{displayGraph.nodes.find(n => n.id === selectedEdge.target)?.data.label}</span></div>
               <label className="field-label" htmlFor="edge-label">分支条件或说明<span>例如：校验通过 / 失败且尚未重试</span></label><textarea id="edge-label" rows={3} value={selectedEdge.label || ''} disabled={!editable} onChange={event => ws.edit({ ...ws.graph, edges: ws.graph.edges.map(e => e.id === selectedEdge.id ? { ...e, label: event.target.value } : e) })} />
+              <label className="field-label" htmlFor="edge-role">显示分类</label><select id="edge-role" disabled={!editable} value={selectedEdge.role || 'main'} onChange={event => { const graph = upgradeGraph(ws.graph); ws.edit({ ...graph, edges: graph.edges.map(e => e.id === selectedEdge.id ? { ...e, role: event.target.value as 'main' | 'support' | 'exception' } : e) }); }}><option value="main">主线 · 粗实线</option><option value="support">次要分支 · 细实线</option><option value="exception">异常分支 · 细虚线</option></select>
+              <p className="field-hint">主循环上的主线会进一步加粗，便于顺着箭头阅读。</p>
+              <p className="field-hint">拖动连线两端，可沿卡片边缘调整位置，或接到其他卡片。</p>
+              {(selectedEdge.sourceAnchor || selectedEdge.targetAnchor) && <button className="button subtle" disabled={!editable} onClick={() => ws.edit({ ...ws.graph, edges: ws.graph.edges.map(edge => { if (edge.id !== selectedEdge.id) return edge; const { sourceAnchor: _source, targetAnchor: _target, ...automatic } = edge; return automatic; }) })}>自动选择连接点</button>}
               <div className="inspector-callout"><GitBranch size={17} /><p>条件判断的每条出口都需要标签，避免人和 agent 对同一条线理解不同。</p></div>
               <div className="node-identity">连线 ID <code>{selectedEdge.id}</code></div>
             </> : <>

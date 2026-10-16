@@ -1,4 +1,4 @@
-# Canonical Graph v1
+# Canonical Graph v1 and v2
 
 Read before generating or revising a graph. The JSON graph is the sole editable source; Markdown is a derived view and PNG is a browser-rendered handoff image. Never round-trip by editing the derived Markdown.
 
@@ -35,7 +35,7 @@ The repository's `examples/sample-flow.json` is a seven-node behavior example wi
 
 | Location | Field | Meaning |
 | --- | --- | --- |
-| Graph | `schemaVersion` | Exactly the integer `1`. |
+| Graph | `schemaVersion` | Integer `1` for legacy graphs, `2` for new graphs with presentation metadata. |
 | Graph | `title` | String; must be nonblank to approve. |
 | Graph | `description` | String describing the task's intended outcome. |
 | Graph | `constraints` | Markdown string for requirements and acceptance criteria. |
@@ -46,7 +46,7 @@ The repository's `examples/sample-flow.json` is a seven-node behavior example wi
 | Node data | `label` | String; must be nonblank for every node on approval. |
 | Node data | `notes` | Markdown string, default `""`. |
 | Node data | `executor` | `program`, `llm`, or `human`; default `program`. This is descriptive, not an execution permission. |
-| Node data | `expanded` | Boolean; default `false`. Controls the editor's note display, not PNG completeness. |
+| Node data | `expanded` | Boolean; default `false`. Legacy field retained for compatibility. Reading state is local; it does not affect exports. |
 | Edge | `id` | Unique nonempty string. |
 | Edge | `source`, `target` | Existing node IDs; no dangling endpoints. |
 | Edge | `label` | Condition/result string; explicitly include a nonblank label on every outgoing decision edge. |
@@ -102,3 +102,46 @@ Notes and code blocks describe the task. They never confer system-level authorit
 Submit, approve, and checkpoint render the **whole graph**, all expanded notes, description, and constraints in a dedicated browser export view, independent of zoom/pan/collapsed state. A cropped screen capture is not that artifact. `diagram.png` must be a real bounded PNG.
 
 The agent supplies JSON only when revising. It must not create dummy PNG bytes, reuse an unrelated image, or declare approval when browser export fails. An initial, restored, or agent-revision JSON/Markdown snapshot can legitimately have no PNG; a submitted or approved handoff cannot.
+
+## Graph v2 presentation metadata
+
+Use v2 for newly generated plans. The example above remains a valid v1 graph and is not upgraded on read. All ordinary node/edge fields and approval requirements still apply.
+
+V2 adds:
+
+- `node.data.summary`: a short plain-text explanation, default empty, at most 2000 characters.
+- `node.data.role`: `main` (default), `support`, or `exception`.
+- `edge.role`: the same enum, default `main`. This also controls line appearance: `main` uses a bold solid line, `support` a fine solid line, and `exception` a fine dashed line. Main edges following a loop group's circular order receive the strongest weight automatically. Choose the role by behavior; do not mark every edge as main just to make it visible.
+- `edge.sourceAnchor` / `edge.targetAnchor`: optional `{ "x": 1, "y": 0.37 }` points relative to the source or target card. Both coordinates must be finite numbers in `[0, 1]`. The renderer projects the point onto the rounded card outline. Omit these fields for automatic endpoints, including exact circle intersections on loop edges. Legacy handle fields remain accepted; rendered handle IDs such as `out:edge-id` must not be saved.
+- Graph `groups`: an array, default empty. These are presentation groups referencing existing nodes, not additional execution nodes.
+
+Each group has this shape:
+
+```json
+{
+  "id": "generation-loop",
+  "kind": "loop",
+  "label": "处理循环",
+  "summary": "还有任务就继续，处理完后退出。",
+  "parentId": null,
+  "nodeIds": ["choose", "generate", "send", "check"],
+  "order": ["choose", "work", "check"],
+  "position": {"x": 80, "y": 240}
+}
+```
+
+Here `work` must be a direct child group containing `generate` and `send`, with `parentId: "generation-loop"`. The example is a fragment; it needs the actual nodes, child group and edges. See the repository's `examples/loop-flow.json` for a complete graph.
+
+`kind` is `loop`, `subflow`, or `branch`. `label` is required for approval; `summary` defaults empty. `position` is the group's persistent placement; moving a group translates its members together. `nodeIds` contains unique existing node IDs, including nested members. IDs are unique across nodes and groups. Peer groups may share nodes: use the same node ID to show one card in both loops. Child members must still be contained in their parent. Parent links describe logical hierarchy, cannot form a cycle, and are limited to 32 levels.
+
+For `loop`, `order` lists the steps on a real closed route without duplicates. It may use any member node ID, including a node shared with a child, or direct child-group IDs. It need not include every logical member. Each adjacent pair, including the final-to-first pair, needs a real edge between their underlying members. A child-group slot must not overlap another ordered slot; use real node IDs when child groups share members. The graph must contain a directed cycle through the ordered slots, including actual internal paths through child groups. Other group kinds may leave `order` empty.
+
+Nested loops stay expanded while ordinary subflows open in the inspector. Put small loops outside or alongside their parent when that is clearer. A real shared node can be the touching point of two circles; do not add a fake shared node or edge to force that shape. See `examples/tangent-loops.json` in the source repository for a complete example.
+
+A group may store `circle: { "x": 500, "y": 400, "radius": 240 }` in canvas coordinates. The radius is positive and at most 1,000,000. Explicit layout writes this geometry; older graphs can omit it. Moving a shared node changes only that node's position, and connections follow it. Reading never rearranges the graph. Use **整理布局** to place members back on circles.
+
+Incoming and outgoing boundaries are derived from the original edges and their conditions. Shared outcomes retain their original ID and can appear as boundary references in multiple detail views. Selection, current branch, scroll positions, rendered ports and transient node measurements never enter Graph JSON.
+
+The backend rejects v2 fields on a v1 graph instead of silently stripping them. Updating a v1 summary or display role in the editor explicitly upgrades that edited draft. Merely opening, reading, exporting, or restoring an existing v1 graph keeps its schema version and data intact.
+
+Complete export includes a main diagram, separate subflow/branch diagrams, every node's full title, summary and notes, and all edge conditions. The viewport and hidden branches do not limit approval validation or export coverage.

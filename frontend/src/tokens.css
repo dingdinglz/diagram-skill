@@ -5,5 +5,21 @@
   --ink: #3f5137;
   --muted: #909d82;
   --green: #3c5f39;
+  --node-surface: #fcfdf8;
+  --node-border: #d5ddce;
+  --node-radius: 10px;
+  --node-shadow: 0 2px 5px #1f3a190a;
+  --flow-edge-main: #61775c;
+  --flow-edge-loop: #4f6b48;
+  --flow-edge-support: #829088;
+  --flow-edge-exception: #829088;
+  --flow-edge-main-width: 3px;
+  --flow-edge-loop-width: 4px;
+  --flow-edge-support-width: 1.6px;
+  --flow-edge-exception-width: 1.6px;
+  --reading-muted: #73816b;
+  --soft-surface: #edf2e8;
+  --loop-surface: #e8efdf88;
+  --decision-ink: #a18450;
   --line: #e0e5d9;
 }

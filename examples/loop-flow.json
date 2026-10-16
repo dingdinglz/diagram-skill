@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 2,
+  "title": "处理请求并逐轮返回结果",
+  "description": "先看请求的主循环，再查看执行和发送的内部步骤。",
+  "constraints": "每条异常路径都有明确结果。查看详情不会修改图。",
+  "nodes": [
+    {
+      "id": "receive",
+      "type": "start",
+      "position": {
+        "x": 496,
+        "y": -40
+      },
+      "data": {
+        "label": "收到请求",
+        "summary": "开始处理这次请求",
+        "notes": "",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "choose",
+      "type": "step",
+      "position": {
+        "x": 496,
+        "y": 202
+      },
+      "data": {
+        "label": "选择本轮任务",
+        "summary": "找出还需要继续处理的任务",
+        "notes": "从尚未完成的任务中选择下一批。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "generate",
+      "type": "step",
+      "position": {
+        "x": 704,
+        "y": 562
+      },
+      "data": {
+        "label": "执行一轮",
+        "summary": "生成这一批任务的新结果",
+        "notes": "处理已经选中的任务。\n\n失败时进入“返回错误”分支，不再发送本轮结果。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "send",
+      "type": "step",
+      "position": {
+        "x": 704,
+        "y": 772
+      },
+      "data": {
+        "label": "送出结果",
+        "summary": "把本轮结果交给接收方",
+        "notes": "发送本轮产生的结果。连接断开时停止这次请求。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "check",
+      "type": "decision",
+      "position": {
+        "x": 288,
+        "y": 562
+      },
+      "data": {
+        "label": "是否全部完成？",
+        "summary": "决定继续下一轮还是结束",
+        "notes": "还有任务需要处理时回到“选择本轮任务”。全部完成后结束请求。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "finish",
+      "type": "end",
+      "position": {
+        "x": 288,
+        "y": 990
+      },
+      "data": {
+        "label": "完成请求",
+        "summary": "所有任务都已处理完毕",
+        "notes": "",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "failed",
+      "type": "end",
+      "position": {
+        "x": 1120,
+        "y": 450
+      },
+      "data": {
+        "label": "返回错误",
+        "summary": "结束本次请求并说明失败原因",
+        "notes": "",
+        "role": "exception",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "cancelled",
+      "type": "end",
+      "position": {
+        "x": 1120,
+        "y": 720
+      },
+      "data": {
+        "label": "停止请求",
+        "summary": "接收方已经断开连接",
+        "notes": "",
+        "role": "exception",
+        "executor": "program",
+        "expanded": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "start",
+      "source": "receive",
+      "target": "choose",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "pick",
+      "source": "choose",
+      "target": "generate",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "generated",
+      "source": "generate",
+      "target": "send",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "sent",
+      "source": "send",
+      "target": "check",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "again",
+      "source": "check",
+      "target": "choose",
+      "label": "还有任务",
+      "role": "main"
+    },
+    {
+      "id": "done",
+      "source": "check",
+      "target": "finish",
+      "label": "全部完成",
+      "role": "main"
+    },
+    {
+      "id": "failure",
+      "source": "generate",
+      "target": "failed",
+      "label": "执行失败",
+      "role": "exception"
+    },
+    {
+      "id": "disconnect",
+      "source": "send",
+      "target": "cancelled",
+      "label": "连接断开",
+      "role": "exception"
+    }
+  ],
+  "groups": [
+    {
+      "id": "request-loop",
+      "kind": "loop",
+      "label": "请求处理循环",
+      "summary": "还有任务就继续处理，全部完成后退出。",
+      "parentId": null,
+      "nodeIds": [
+        "choose",
+        "generate",
+        "send",
+        "check"
+      ],
+      "order": [
+        "choose",
+        "work",
+        "check"
+      ],
+      "position": {
+        "x": 200,
+        "y": 200
+      }
+    },
+    {
+      "id": "work",
+      "kind": "subflow",
+      "label": "处理并发送",
+      "summary": "生成本轮结果，再交给接收方。",
+      "parentId": "request-loop",
+      "nodeIds": [
+        "generate",
+        "send"
+      ],
+      "order": [],
+      "position": {
+        "x": 704,
+        "y": 562
+      }
+    }
+  ]
+}

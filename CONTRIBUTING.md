@@ -32,9 +32,12 @@ The browser smoke test needs [agent-browser](https://github.com/vercel-labs/agen
 ```sh
 npm run build
 npm run test:browser
+npm run test:connections
 ```
 
 It uses a temporary project to exercise drawing, connections, autosave, undo/redo, feedback, agent revision, approval, history, cancellation, restart, and conflicting edits. It also checks that the app loads no external resources. Artifacts are saved to the ignored `.test-artifacts/browser-smoke/` directory.
+
+The connection smoke test checks arbitrary card-outline endpoints, reconnection, cancellation, persistence, nested tangent loops and shared-node dragging. It also uses an isolated temporary project; screenshots and complete PNG exports go to `.test-artifacts/connection-smoke/`.
 
 ## Package the skill
 

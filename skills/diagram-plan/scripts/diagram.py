@@ -128,7 +128,7 @@ def wait_task(store, task_id, timeout=25):
 def run(args):
     if args.command == "validate":
         graph = normalize_graph(graph_file(args.file, args.project), approval=args.approval)
-        return {"valid": True, "schemaVersion": 1, "nodes": len(graph["nodes"]), "edges": len(graph["edges"])}
+        return {"valid": True, "schemaVersion": graph["schemaVersion"], "nodes": len(graph["nodes"]), "edges": len(graph["edges"])}
     store = Store(args.project)
     if args.command == "serve":
         serve(store, args.port)
