@@ -6,7 +6,7 @@ Plan a coding task with an editable flowchart before your agent writes code.
 
 Draw the core flow yourself or ask your agent for a first draft. Open it in your browser, fix the branches, add the details, and approve a version to build from. Flowplan is installed as the `diagram-plan` skill.
 
-![Flowplan editor showing a message validation flow with an explicit rejection branch](docs/images/editor.png)
+![Flowplan editor with task navigation, a message validation flow, and Markdown details](docs/images/editor.png)
 
 ## Install
 
@@ -34,6 +34,14 @@ The editor UI is currently in Chinese. You can write the diagram and its notes i
 Drafts save automatically. Undo and redo handle small mistakes; saved versions let you revisit earlier plans without overwriting an approval. If your agent has stopped waiting, return to the conversation and ask it to continue the diagram task.
 
 Each approval saves `diagram.json`, `diagram.md`, and `diagram.png`. The PNG includes the full flow and all note cards, even when they were collapsed on the canvas. [View a sample export](docs/images/plan-export.png).
+
+## The editor
+
+- **Canvas:** switch between the main flow and its branches, add nodes from the bottom toolbar, and use “100% 阅读” to read cards at full size.
+- **Details:** read flow descriptions and node notes as Markdown in the side panel. Enter editing mode when you want to make changes.
+- **Navigation and history:** search your flows in the left sidebar, check save status, and open version history without leaving the workspace.
+
+The light interface uses locally bundled Noto Sans SC and Phosphor icons. Canvas background motion can be paused and respects reduced-motion preferences. On narrow screens, navigation and details open as dismissible panels. [See the mobile reader](docs/images/editor-mobile.png).
 
 ## Try the canvas
 
