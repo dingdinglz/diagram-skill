@@ -1,6 +1,6 @@
 import { memo, useEffect, useState, type PointerEvent } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from '@xyflow/react';
-import { ChevronRight, Sparkles, UserRound, CircleDot, Flag, GitBranch, Layers2 } from 'lucide-react';
+import { ChevronRight, FileText, NODE_ICONS, EXECUTOR_ICONS, GroupIcon } from './icons';
 import type { GraphNode, NodeData, NodeKind } from './types';
 import { EXECUTOR_LABELS } from './types';
 import type { nodePorts } from './geometry';
@@ -9,13 +9,18 @@ import { CARD_RADIUS, closestOutlinePoint, type Point } from './anchors';
 export function NodeBody({ node, groupId, branchCount = 0, exceptionsOnly = false, onBranches, onGroup }: {
   node: GraphNode; groupId?: string; branchCount?: number; exceptionsOnly?: boolean; onBranches?: () => void; onGroup?: () => void;
 }) {
-  const KindIcon = groupId ? Layers2 : node.type === 'start' ? CircleDot : node.type === 'end' ? Flag : node.type === 'decision' ? GitBranch : null;
-  const ExecutorIcon = node.data.executor === 'llm' ? Sparkles : UserRound;
+  const KindIcon = groupId ? GroupIcon : NODE_ICONS[node.type];
+  const ExecutorIcon = EXECUTOR_ICONS[node.data.executor];
   return <div className="node-body">
-    <div className="node-heading">{KindIcon && <KindIcon className="node-kind-icon" size={15} aria-label={groupId ? '子流程' : node.type === 'decision' ? '条件判断' : undefined} />}<div className="node-title" title={node.data.label}>{node.data.label || '未命名节点'}</div></div>
-    <div className="node-summary" title={node.data.summary || ''}>{node.data.summary || ''}</div>
+    <div className="node-main">
+      <span className="node-symbol" aria-hidden="true"><KindIcon className="node-kind-icon" size={22} weight="bold" /></span>
+      <div className="node-copy"><div className="node-title" title={node.data.label}>{node.data.label || '未命名节点'}</div>
+        {!!node.data.summary && <div className="node-summary" title={node.data.summary}>{node.data.summary}</div>}
+      </div>
+    </div>
     <div className="node-footer">
-      {node.data.executor !== 'program' && <span className="executor-label"><ExecutorIcon size={11} />{EXECUTOR_LABELS[node.data.executor]}</span>}
+      <span className="executor-label"><ExecutorIcon size={13} />{EXECUTOR_LABELS[node.data.executor]}</span>
+      {!!node.data.notes && <span className="node-note-indicator" title="包含完整说明"><FileText size={12} />说明</span>}
       {groupId && <button className="node-subflow-button nodrag nopan" tabIndex={onGroup ? 0 : -1} onClick={e => { e.stopPropagation(); onGroup?.(); }}>查看子流程<ChevronRight size={11} /></button>}
       {!!branchCount && <button className="node-branch-button nodrag nopan" tabIndex={onBranches ? 0 : -1} aria-label={`查看 ${node.data.label} 的分支`} onClick={e => { e.stopPropagation(); onBranches?.(); }}>{exceptionsOnly ? '异常' : '分支'} · {branchCount}<ChevronRight size={11} /></button>}
     </div>

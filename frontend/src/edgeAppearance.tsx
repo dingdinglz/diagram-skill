@@ -8,7 +8,7 @@ type EdgeKind = 'loop' | 'main' | 'support' | 'exception';
 export function edgeAppearance(geometry: EdgeGeometry, selected = false) {
   const role = geometry.edge.role || 'main';
   const kind: EdgeKind = role === 'main' && geometry.isLoop ? 'loop' : role;
-  const stroke = selected ? 'var(--green)' : `var(--flow-edge-${kind})`;
+  const stroke = selected ? 'var(--accent)' : `var(--flow-edge-${kind})`;
   const width = `var(--flow-edge-${kind}-width)`;
   const style: CSSProperties = {
     stroke,

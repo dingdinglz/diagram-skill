@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-02T09:33:55Z",
+  "title": "Design System: Flowplan",
+  "extensions": {
+    "colorMeta": {
+      "accent": { "role": "primary", "displayName": "Review Blue" },
+      "nav": { "role": "neutral", "displayName": "Navigation Pale Gray" },
+      "paper": { "role": "neutral", "displayName": "Document White" },
+      "canvas": { "role": "neutral", "displayName": "Cool Canvas" },
+      "executor-program": { "role": "secondary", "displayName": "Program Slate" },
+      "executor-llm": { "role": "secondary", "displayName": "LLM Purple" },
+      "executor-human": { "role": "secondary", "displayName": "Human Amber" },
+      "success": { "role": "secondary", "displayName": "Approval Teal" },
+      "warning": { "role": "secondary", "displayName": "Pending Amber" },
+      "danger": { "role": "secondary", "displayName": "Error Rose" }
+    },
+    "typographyMeta": {
+      "body": { "displayName": "Reading Body", "purpose": "16px/1.75 reading content. Self-hosted Noto Sans SC Variable from @fontsource-variable/noto-sans-sc 5.3.1; PingFang SC, Microsoft YaHei, system-ui, sans-serif fallbacks. Bundled unicode-range subsets work offline with font-display: swap. Weights: 400 regular, 500 medium, 600 semibold." },
+      "ui": { "displayName": "Workspace UI", "purpose": "14px/1.45 controls and inherited workspace text; inspector tabs and shortcut help remain 14px." },
+      "meta": { "displayName": "Metadata", "purpose": "13px lifecycle status, save feedback, counts, history metadata, and dock labels. Tabular numerals for counts and zoom." },
+      "small": { "displayName": "Small / Graph Metadata", "purpose": "12px small text, keyboard hints, code baseline, graph metadata, and node footer. Reader code blocks explicitly use 13px; inline code remains relative to surrounding text." },
+      "title": { "displayName": "Document Title", "purpose": "20px/1.4 workspace heading, 600 weight, zero tracking; 18px on mobile. Brand wordmark remains 20px." },
+      "headline": { "displayName": "Reader Heading", "purpose": "22px/1.5, 600 weight, zero tracking for full node and graph reader headings." },
+      "node-title": { "displayName": "Node Title", "purpose": "16px/22px, 600 weight at reading scale. Below .65 zoom: balanced two-line clamp(24px, 14px / zoom, 34px). Geometry stays 248×116." },
+      "node-summary": { "displayName": "Node Summary", "purpose": "12px/16px optional two-line summary; 2px top margin. Hidden in overview with the 12px footer. Edge labels use 12px/18px, rising to clamp(18px, 12px / zoom, 30px) in overview." },
+      "reading": { "displayName": "Reader Notes", "purpose": "16px/1.75 Markdown explanations outside the compact graph card; reader summaries use 1.8 leading. Read-first graph/node behavior remains in the application, not in these static examples." },
+      "label": { "displayName": "Field Label", "purpose": "14px, 500 weight; explanatory field metadata is 13px, 400 weight." },
+      "button": { "displayName": "Control Label", "purpose": "14px, 500 weight for primary, secondary, and subtle controls. Mobile toolbar scope/read labels use 13px; at ≤350px the toolbar may wrap to two rows rather than shrink text further." },
+      "notes": { "displayName": "Notes Editor", "purpose": "14px/1.75 in the interface font, not monospace; mobile inspector fields use 16px. Code, IDs and keyboard hints use SFMono-Regular, Consolas, Liberation Mono, Noto Sans SC Variable, monospace. exportFontCSS in frontend/src/fontEmbedding.ts waits for mounted export text and embeds only loaded interface-font subsets; exports keep their separate compact typography." }
+    },
+    "shadows": [
+      { "name": "node-shadow", "value": "0 3px 8px #1c31550a, 0 1px 2px #1c315508", "purpose": "Graph cards at rest; tokens.css." },
+      { "name": "shadow-float", "value": "0 6px 20px #2435520b, 0 2px 5px #24355206", "purpose": "Floating node dock, zoom controls, and busy message; tokens.css. The flush 56px-minimum top toolbar has no shadow." },
+      { "name": "shadow-modal", "value": "0 24px 80px #101c3a33, 0 4px 16px #101c3a14", "purpose": "Protected-focus dialogs; tokens.css." },
+      { "name": "node-hover", "value": "0 5px 14px #1c315513", "purpose": "Hovered graph card; styles.css." },
+      { "name": "node-selected", "value": "0 5px 16px #4263df1c", "purpose": "Selected graph card; styles.css." },
+      { "name": "inspector-overlay", "value": "-8px 0 30px #1e315019", "purpose": "Inspector at width ≤1100px; styles.css." }
+    ],
+    "motion": [
+      { "name": "ease-out", "value": "cubic-bezier(.16, 1, .3, 1)", "purpose": "Inspector, dialog, and mobile drawer; tokens.css." },
+      { "name": "control-transition", "value": "150ms", "purpose": "Background, border, color, shadow, and edge-stroke state changes; styles.css." },
+      { "name": "panel-content-settle", "value": "220ms", "purpose": "Inspector enters from 10px horizontally; reader identity changes enter from 6px vertically at .72 opacity. No typing/revision-triggered remounts; App.tsx and ui/Motion.tsx." },
+      { "name": "dialog-settle", "value": "220ms", "purpose": "Dialog enters from 10px vertically at .985 scale; 160ms backdrop tint. Immediate removal preserves existing focus/lifecycle behavior; Dialog.tsx." },
+      { "name": "drawer-transition", "value": "220ms", "purpose": "Mobile navigation transform, with delayed visibility on close and immediate inert; styles.css." },
+      { "name": "dock-selection-spring", "value": "stiffness 420 / damping 34 / mass .55", "purpose": "Shared task/tab selection and icons-only dock proximity. Dock scale 1–1.22, lift 0–4px; fixed hit areas. Disabled for narrow/coarse-pointer/reduced-motion states; ui/Motion.tsx and ui/reactbits/NodeDock.tsx." },
+      { "name": "scope-thumb", "value": "260ms / bounce 0 / trailing edge delay 25ms", "purpose": "Controlled, non-draggable React Bits RubberSegment adaptation; separate clipped edges with native button activation and keyboard navigation; ui/reactbits/FlowScope.tsx." },
+      { "name": "aurora-atmosphere", "value": "30fps cap / speed .22 / opacity .4 / 2 layers", "purpose": "Canvas-only native-WebGL2 React Bits adaptation. OKLCH palette #829de2/#81cbbb/#9daceb; DPR ≤1, buffer width ≤1280px. Persistent pause toggle; no RAF during interaction/editing/hidden states. No canvas for mobile/coarse/reduced-motion/user-disabled modes; CSS fallback on context failure; ui/reactbits/Aurora.tsx." },
+      { "name": "spotlight-material", "value": "240ms opacity / .12 fill / .6 rim", "purpose": "Local radial falloff and masked rim on dock and empty state, pointer-transparent, no idle loop; ui/reactbits/SpotlightCard.tsx and atmosphere.css." },
+      { "name": "primary-sheen", "value": "650ms once / peak alpha .136", "purpose": "Native approval/empty-state button, hover/focus only, no idle loop, disabled under reduced motion; ui/reactbits/GlareHover.tsx and atmosphere.css." },
+      { "name": "canvas-reading-fit", "value": "250ms", "purpose": "Explicit reading and fit commands; App.tsx. Initial task/version fit is immediate. Canvas resizing preserves zoom and the centered graph point by adjusting x/y by half the size delta, without refitting." },
+      { "name": "canvas-zoom", "value": "180ms", "purpose": "Zoom button movement; App.tsx." },
+      { "name": "reduced-motion", "value": "0ms", "purpose": "Subscribed media-query preference (not Motion 14's initial-only hook): static indicators/dock, direct scope jumps, instant panel/dialog/viewport updates and CSS cancellation of in-flight entrances. UI smoke verifies launch-time preference via Chromium flag and live preference changes through a test-only CDP media bridge." }
+    ],
+    "breakpoints": [
+      { "name": "compact-max-width", "value": "1280px" },
+      { "name": "overlay-max-width", "value": "1100px" },
+      { "name": "mobile-max-width", "value": "760px" },
+      { "name": "small-mobile-max-width", "value": "380px" },
+      { "name": "toolbar-wrap-max-width", "value": "350px" },
+      { "name": "short-max-height", "value": "560px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Blue primary action with 14px medium type and an 18px Phosphor bold inline Check. Static base-control excerpt; application GlareHover supplies the separately documented sheen.",
+      "html": "<button class=\"ds-primary\" type=\"button\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 256 256\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M232.49,80.49l-128,128a12,12,0,0,1-17,0l-56-56a12,12,0,1,1,17-17L96,183,215.51,63.51a12,12,0,0,1,17,17Z\"/></svg>确认流程</button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:9px 13px;border:1px solid var(--accent,#4263df);border-radius:7px;background:var(--accent,#4263df);color:#fff;font:500 14px/1.45 var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif);white-space:nowrap;cursor:pointer;box-shadow:0 2px 3px #2647b51a;transition:background 150ms,border-color 150ms,box-shadow 150ms,transform 120ms cubic-bezier(.16,1,.3,1)}.ds-primary>svg{flex-shrink:0}.ds-primary:hover:not(:disabled){background:var(--accent-hover,#3451c6);border-color:var(--accent-hover,#3451c6);box-shadow:0 3px 8px #2647b528}.ds-primary:active:not(:disabled){transform:translateY(1px)}.ds-primary:focus-visible{outline:2px solid var(--accent,#4263df);outline-offset:3px}.ds-primary:disabled{opacity:.42;cursor:not-allowed}@media(max-width:760px){.ds-primary{min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-primary{transition:none}.ds-primary:active:not(:disabled){transform:none}}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Paper-and-border alternative for feedback or explicit editing; 14px medium interface type.",
+      "html": "<button class=\"ds-secondary\" type=\"button\">请 agent 修改</button>",
+      "css": ".ds-secondary{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:9px 13px;border:1px solid #d7dfec;border-radius:7px;background:var(--paper,#ffffff);color:#45536b;font:500 14px/1.45 var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif);white-space:nowrap;cursor:pointer;transition:background 150ms,border-color 150ms,box-shadow 150ms,transform 120ms cubic-bezier(.16,1,.3,1)}.ds-secondary:hover:not(:disabled){background:var(--canvas,#f6f8fc);border-color:#acbad4}.ds-secondary:active:not(:disabled){transform:translateY(1px)}.ds-secondary:focus-visible{outline:2px solid var(--accent,#4263df);outline-offset:3px}.ds-secondary:disabled{opacity:.42;cursor:not-allowed}@media(max-width:760px){.ds-secondary{min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-secondary{transition:none}.ds-secondary:active:not(:disabled){transform:none}}"
+    },
+    {
+      "name": "Subtle Button",
+      "kind": "button",
+      "refersTo": "button-subtle",
+      "description": "Low-emphasis 14px medium chrome action with a soft hover or active fill.",
+      "html": "<button class=\"ds-subtle\" type=\"button\">历史</button>",
+      "css": ".ds-subtle{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:8px 9px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--reading-muted,#5f6d82);font:500 14px/1.45 var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif);white-space:nowrap;cursor:pointer;transition:background 150ms,border-color 150ms,box-shadow 150ms,transform 120ms cubic-bezier(.16,1,.3,1)}.ds-subtle:hover:not(:disabled),.ds-subtle.ds-active{background:var(--soft-surface,#f0f3f8);color:var(--ink,#202a3c)}.ds-subtle:active:not(:disabled){transform:translateY(1px)}.ds-subtle:focus-visible{outline:2px solid var(--accent,#4263df);outline-offset:3px}.ds-subtle:disabled{opacity:.42;cursor:not-allowed}@media(max-width:760px){.ds-subtle{min-height:44px}}@media(prefers-reduced-motion:reduce){.ds-subtle{transition:none}.ds-subtle:active:not(:disabled){transform:none}}"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-button",
+      "description": "Bundled Phosphor bold through App.tsx IconContext and UI_ICON_STYLE (weight bold, size 20). Optical roles: standalone 20px; inline/tab/navigation 18px; status 16px; graph metadata 14px; dock 22px; node 20px (28px overview). Sidebar shortcut uses Command at 20px, ambient control SunDim, fit CornersOut. No mixed duotone icons. Base target 32px, toolbar 36px, mobile 44px; glyph size is not target size. Mobile save glyphs retain the source 14px override.",
+      "html": "<button class=\"ds-icon-button\" type=\"button\" aria-label=\"关闭\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 256 256\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z\"/></svg></button>",
+      "css": ".ds-icon-button{display:inline-flex;flex-shrink:0;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--reading-muted,#5f6d82);cursor:pointer;transition:background 150ms,color 150ms}.ds-icon-button>svg{width:20px;height:20px;flex-shrink:0}.ds-icon-button:hover:not(:disabled){background:#edf1f8;color:var(--ink,#202a3c)}.ds-icon-button:focus-visible{outline:2px solid var(--accent,#4263df);outline-offset:3px}.ds-icon-button:disabled{opacity:.42;cursor:not-allowed}@media(max-width:760px){.ds-icon-button{width:44px;height:44px}}@media(prefers-reduced-motion:reduce){.ds-icon-button{transition:none}}"
+    },
+    {
+      "name": "Labeled Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "14px field and medium label; 16px mobile input. Inspector is 380px desktop, 336px at ≤1280px, 380px overlay at ≤1100px, 100% on mobile. GraphInspector.tsx defaults to 16px/1.75 Markdown reading with 22px headings; explicit editing/return retains revision-protected autosave and conflict-disabled text. These are source-described functions, not verification claims; this excerpt is only a field.",
+      "html": "<label class=\"ds-field-label\" for=\"ds-flow-title\">流程名称</label><input class=\"ds-input\" id=\"ds-flow-title\" value=\"消息处理与校验\" placeholder=\"为流程命名\" />",
+      "css": ".ds-field-label{display:block;margin:22px 0 8px;color:#48566d;font:500 14px/1.45 var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif)}.ds-input{display:block;box-sizing:border-box;width:100%;padding:10px 12px;border:1px solid var(--line,#e3e8f0);border-radius:8px;background:var(--paper,#ffffff);color:var(--ink,#202a3c);font:400 14px/1.45 var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif);caret-color:var(--accent,#4263df);outline:none;transition:border-color 150ms,background 150ms}.ds-input:hover:not(:disabled){border-color:#bac5d8}.ds-input:focus,.ds-input:focus-visible{border-color:var(--accent,#4263df);outline:2px solid var(--accent-soft,#edf1ff);outline-offset:1px}.ds-input:disabled{color:var(--reading-muted,#5f6d82);background:var(--canvas,#f6f8fc);opacity:1;cursor:default}.ds-input::placeholder{color:var(--muted,#647086)}@media(max-width:760px){.ds-input{font-size:16px}}@media(prefers-reduced-motion:reduce){.ds-input{transition:none}}"
+    },
+    {
+      "name": "Task Navigation",
+      "kind": "nav",
+      "refersTo": "task-item-active",
+      "description": "Pale-gray navigation with right separator, 14px medium rows (44px minimum), 18px bold FileText, 12px secondary row status; shared status/save/count roles elsewhere are 13px. Active fill/text persist on hover, focus offset is -2px. Draft metadata and timestamps are hidden; title retains full title/status/time. Sidebar width 232px, 212px at ≤1280px; mobile drawer 280px capped at 88vw. Routed-F tile 26px and wordmark 20px share a 72px brand row. Shortcut help is 14px with Command. Static list excerpt, not a functional drawer.",
+      "html": "<nav class=\"ds-task-nav\" aria-label=\"任务列表\"><button class=\"ds-task\" type=\"button\" aria-current=\"page\" title=\"消息处理与校验 · 草稿 · 2026/11/2 10:00\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 256 256\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M216.49,79.52l-56-56A12,12,0,0,0,152,20H56A20,20,0,0,0,36,40V216a20,20,0,0,0,20,20H200a20,20,0,0,0,20-20V88A12,12,0,0,0,216.49,79.52ZM160,57l23,23H160ZM60,212V44h76V92a12,12,0,0,0,12,12h48V212Zm112-80a12,12,0,0,1-12,12H96a12,12,0,0,1,0-24h64A12,12,0,0,1,172,132Zm0,40a12,12,0,0,1-12,12H96a12,12,0,0,1,0-24h64A12,12,0,0,1,172,172Z\"/></svg><span class=\"ds-task-text\">消息处理与校验</span></button><button class=\"ds-task\" type=\"button\" title=\"下一份实现计划 · 已确认 · 2026/11/2 09:00\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 256 256\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M216.49,79.52l-56-56A12,12,0,0,0,152,20H56A20,20,0,0,0,36,40V216a20,20,0,0,0,20,20H200a20,20,0,0,0,20-20V88A12,12,0,0,0,216.49,79.52ZM160,57l23,23H160ZM60,212V44h76V92a12,12,0,0,0,12,12h48V212Zm112-80a12,12,0,0,1-12,12H96a12,12,0,0,1,0-24h64A12,12,0,0,1,172,132Zm0,40a12,12,0,0,1-12,12H96a12,12,0,0,1,0-24h64A12,12,0,0,1,172,172Z\"/></svg><span class=\"ds-task-text\">下一份实现计划<small class=\"ds-task-meta\"><span class=\"ds-task-dot ds-approved\" aria-hidden=\"true\"></span>已确认</small></span></button></nav>",
+      "css": ".ds-task-nav{background:var(--nav,#f8f9fc);color:var(--nav-ink,#344158);padding:0 12px;border-right:1px solid var(--line,#e3e8f0);font-family:var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif)}.ds-task{box-sizing:border-box;display:flex;align-items:flex-start;gap:10px;width:100%;min-height:44px;margin:2px 0;padding:11px 10px;border:0;border-radius:6px;background:transparent;color:var(--nav-ink,#344158);text-align:left;cursor:pointer;transition:background 150ms,color 150ms}.ds-task>svg{width:18px;height:18px;flex-shrink:0;margin-top:2px;color:var(--nav-muted,#647086)}.ds-task:hover:not(:disabled){background:var(--nav-raised,#edf0f6);color:var(--ink,#202a3c)}.ds-task[aria-current=page],.ds-task[aria-current=page]:hover:not(:disabled){background:var(--accent-soft,#edf1ff);color:var(--accent-hover,#3451c6)}.ds-task[aria-current=page]>svg{color:var(--accent,#4263df)}.ds-task:focus-visible{outline:2px solid var(--accent,#4263df);outline-offset:-2px}.ds-task:disabled{opacity:.42;cursor:not-allowed}.ds-task-text{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:500 14px/1.5 var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif)}.ds-task-meta{display:flex;align-items:center;gap:5px;margin-top:4px;color:var(--nav-muted,#647086);font-size:12px;font-weight:400}.ds-task-dot{box-sizing:border-box;display:inline-block;width:5px;height:5px;border:1px solid currentColor;border-radius:50%;flex-shrink:0}.ds-task-dot.ds-approved{background:var(--success,#1d755f);border-color:var(--success,#1d755f)}@media(prefers-reduced-motion:reduce){.ds-task{transition:none}}"
+    },
+    {
+      "name": "Approved Status",
+      "kind": "chip",
+      "refersTo": "status-approved",
+      "description": "13px medium informational lifecycle label, not an interactive chip; no fabricated hover state. Save feedback and counts share the 13px metadata role.",
+      "html": "<span class=\"ds-status\"><span class=\"ds-status-dot\" aria-hidden=\"true\"></span>已确认</span>",
+      "css": ".ds-status{box-sizing:border-box;display:inline-flex;align-items:center;gap:7px;min-height:28px;padding:5px 10px;border-radius:6px;background:var(--success-soft,#eaf7f0);color:var(--success,#1d755f);font:500 13px/18px var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif);white-space:nowrap}.ds-status-dot{width:5px;height:5px;border-radius:50%;background:currentColor}"
+    },
+    {
+      "name": "Flow Node",
+      "kind": "card",
+      "refersTo": "flow-node",
+      "description": "Fixed 248×116 card: main/symbol/copy, optional 12px/16px summary, 12px footer with 14px bold metadata icons. NODE_ICONS maps start Play, step List, decision GitFork, end CheckCircle; GroupIcon is StackSimple. EXECUTOR_ICONS remains Code/Cpu/User. Add ds-selected, ds-llm or ds-human; ds-overview plus --canvas-zoom previews zoom <.65 with clamp(24px, 14px / zoom, 34px) titles. Overview edge labels use clamp(18px, 12px / zoom, 30px). Overview hides summary/footer; application card selection opens full-sized reader/subflow/branch actions. No app interactions embedded.",
+      "html": "<div class=\"ds-node ds-selected\" tabindex=\"0\" aria-label=\"整理输入字段，程序\"><div class=\"ds-node-body\"><div class=\"ds-node-main\"><span class=\"ds-node-symbol\" aria-hidden=\"true\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 256 256\" fill=\"currentColor\"><path d=\"M228,128a12,12,0,0,1-12,12H40a12,12,0,0,1,0-24H216A12,12,0,0,1,228,128ZM40,76H216a12,12,0,0,0,0-24H40a12,12,0,0,0,0,24ZM216,180H40a12,12,0,0,0,0,24H216a12,12,0,0,0,0-24Z\"/></svg></span><div class=\"ds-node-copy\"><div class=\"ds-node-title\">整理输入字段</div></div></div><div class=\"ds-node-footer\"><span class=\"ds-executor\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 256 256\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M71.68,97.22,34.74,128l36.94,30.78a12,12,0,1,1-15.36,18.44l-48-40a12,12,0,0,1,0-18.44l48-40A12,12,0,0,1,71.68,97.22Zm176,21.56-48-40a12,12,0,1,0-15.36,18.44L221.26,128l-36.94,30.78a12,12,0,1,0,15.36,18.44l48-40a12,12,0,0,0,0-18.44ZM164.1,28.72a12,12,0,0,0-15.38,7.18l-64,176a12,12,0,0,0,7.18,15.37A11.79,11.79,0,0,0,96,228a12,12,0,0,0,11.28-7.9l64-176A12,12,0,0,0,164.1,28.72Z\"/></svg>程序</span></div></div></div>",
+      "css": ".ds-node{width:248px;height:116px;color:var(--ink,#202a3c);font:400 13px/1.45 var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif)}.ds-node-body{box-sizing:border-box;position:relative;display:grid;grid-template-rows:minmax(0,1fr) 20px;gap:8px;height:116px;padding:14px 16px;border:1px solid var(--node-border,#d6deeb);border-radius:var(--node-radius,10px);background:var(--node-surface,#ffffff);box-shadow:var(--node-shadow,0 3px 8px #1c31550a,0 1px 2px #1c315508);overflow:hidden;transition:border-color 150ms,box-shadow 150ms}.ds-node:hover>.ds-node-body{border-color:#9badcc;box-shadow:0 5px 14px #1c315513}.ds-node.ds-selected>.ds-node-body{border:2px solid var(--accent,#4263df);padding:13px 15px;box-shadow:0 5px 16px #4263df1c}.ds-node:focus-visible{outline:2px solid var(--accent,#4263df);outline-offset:6px;border-radius:12px}.ds-node-main{display:flex;align-items:center;gap:10px;min-width:0;min-height:0}.ds-node-symbol{display:grid;place-items:center;width:32px;height:32px;flex-shrink:0;border-radius:8px;background:#edf1f8;color:#617899}.ds-node-symbol>svg{width:20px;height:20px}.ds-node-copy{min-width:0;flex:1}.ds-node-title{font-size:16px;font-weight:600;line-height:22px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}.ds-node-summary{font-size:12px;line-height:16px;margin-top:2px;color:var(--reading-muted,#5f6d82);overflow:hidden;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ds-node-footer{display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;line-height:18px;color:var(--reading-muted,#5f6d82)}.ds-node-footer svg{width:14px;height:14px;flex-shrink:0}.ds-executor{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;font-size:12px;white-space:nowrap;color:#61728f}.ds-llm .ds-executor{color:#8461a7}.ds-human .ds-executor{color:#91651e}.ds-node.ds-overview .ds-node-title{font-size:clamp(24px,calc(14px / var(--canvas-zoom,1)),34px);line-height:1.25;white-space:normal;text-wrap:balance;text-overflow:clip;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}.ds-overview .ds-node-symbol{width:40px;height:40px}.ds-overview .ds-node-symbol>svg{width:28px;height:28px}.ds-overview .ds-node-summary,.ds-overview .ds-executor,.ds-overview .ds-note-indicator,.ds-overview .ds-node-footer{display:none}.ds-overview .ds-node-body{grid-template-rows:minmax(0,1fr)}@media(prefers-reduced-motion:reduce){.ds-node-body{transition:none}}"
+    },
+    {
+      "name": "Canvas Scope Switch",
+      "kind": "custom",
+      "refersTo": "view-switch",
+      "description": "Main-flow versus branch scope in the flush full-width toolbar (56px minimum, aligned with the 56px inspector tabs, no shadow). Desktop labels 14px; mobile 13px with 44px targets, icon-only layout, and explicit reading command. At ≤350px the toolbar may wrap to two rows instead of shrinking text. Pressed state is illustrative; React owns switching and the motion thumb.",
+      "html": "<div class=\"ds-view-switch\" role=\"group\" aria-label=\"流程显示范围\"><button type=\"button\" aria-pressed=\"true\">主线</button><button type=\"button\" aria-label=\"显示分支\" aria-pressed=\"false\">含分支</button></div>",
+      "css": ".ds-view-switch{display:flex;gap:2px;padding:2px;background:var(--soft-surface,#f0f3f8);border-radius:5px}.ds-view-switch button{min-height:32px;padding:6px 9px;border:0;border-radius:4px;background:transparent;color:var(--reading-muted,#5f6d82);font:400 14px/1.45 var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif);white-space:nowrap;cursor:pointer}.ds-view-switch button[aria-pressed=true]{background:var(--paper,#ffffff);color:var(--accent,#4263df)}.ds-view-switch button:focus-visible{outline:2px solid var(--accent,#4263df);outline-offset:3px}.ds-view-switch button:disabled{opacity:.42;cursor:not-allowed}@media(max-width:760px){.ds-view-switch button{font-size:13px;min-height:44px;padding-inline:8px}}"
+    },
+    {
+      "name": "Dialog Surface",
+      "kind": "custom",
+      "refersTo": "dialog",
+      "description": "Header-only visual excerpt of the feedback dialog: 22px semibold heading on desktop and mobile, 14px explanatory copy, bold ChatText and X. Not a functional modal or a short-height verification result. Actual Dialog.tsx separates scrollable .modal-content from persistent .modal-actions, hides the decorative icon at ≤560px height and shortens textareas. Use Dialog.tsx for focus trapping, scroll lock, focus return, and busy dismissal rules.",
+      "html": "<div class=\"ds-dialog-backdrop\"><section class=\"ds-dialog\" aria-labelledby=\"ds-dialog-title\"><button class=\"ds-dialog-close\" type=\"button\" aria-label=\"关闭对话框\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 256 256\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M208.49,191.51a12,12,0,0,1-17,17L128,145,64.49,208.49a12,12,0,0,1-17-17L111,128,47.51,64.49a12,12,0,0,1,17-17L128,111l63.51-63.52a12,12,0,0,1,17,17L145,128Z\"/></svg></button><div class=\"ds-dialog-content\"><div class=\"ds-dialog-icon\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 256 256\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M216,44H40A20,20,0,0,0,20,64V224A19.82,19.82,0,0,0,31.56,242.1a20.14,20.14,0,0,0,8.49,1.9,19.91,19.91,0,0,0,12.82-4.72l.12-.11L84.47,212H216a20,20,0,0,0,20-20V64A20,20,0,0,0,216,44Zm-4,144H80a11.93,11.93,0,0,0-7.84,2.92L44,215.23V68H212ZM84,108A12,12,0,0,1,96,96h64a12,12,0,1,1,0,24H96A12,12,0,0,1,84,108Zm0,40a12,12,0,0,1,12-12h64a12,12,0,0,1,0,24H96A12,12,0,0,1,84,148Z\"/></svg></div><h2 id=\"ds-dialog-title\">告诉 agent 要改哪里</h2><p>当前图、完整说明和 PNG 会一并交给 agent。提交后暂时只读，避免双方同时修改。</p></div></section></div>",
+      "css": ".ds-dialog-backdrop{display:grid;grid-template-columns:minmax(0,1fr);place-items:center;background:#101b326b;padding:24px;font-family:var(--font,'Noto Sans SC Variable','PingFang SC','Microsoft YaHei',system-ui,sans-serif)}.ds-dialog{box-sizing:border-box;position:relative;display:flex;flex-direction:column;width:min(464px,100%);min-width:0;max-width:100%;max-height:92dvh;overflow:hidden;background:var(--paper,#ffffff);border:1px solid #dbe3f0;border-radius:14px;box-shadow:var(--shadow-modal,0 24px 80px #101c3a33,0 4px 16px #101c3a14)}.ds-dialog-content{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:34px}.ds-dialog-close{position:absolute;top:14px;right:14px;z-index:2;display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:6px;background:var(--paper,#ffffff);color:var(--reading-muted,#5f6d82);cursor:pointer;transition:background 150ms,color 150ms}.ds-dialog-close:hover:not(:disabled){background:#edf1f8;color:var(--ink,#202a3c)}.ds-dialog-close:focus-visible{outline:2px solid var(--accent,#4263df);outline-offset:3px}.ds-dialog-close:disabled{opacity:.42;cursor:not-allowed}.ds-dialog-icon{display:grid;place-items:center;width:45px;height:45px;color:var(--accent,#4263df);background:var(--accent-soft,#edf1ff);border-radius:11px;margin-bottom:23px}.ds-dialog h2{margin:0 0 13px;padding-right:14px;color:var(--ink,#202a3c);font-size:22px;line-height:1.45;font-weight:600;letter-spacing:0}.ds-dialog p{margin:0;color:var(--reading-muted,#5f6d82);font-size:14px;font-weight:400;line-height:1.85}@media(max-width:760px){.ds-dialog-backdrop{padding:16px}.ds-dialog{border-radius:12px}.ds-dialog-content{padding:30px 24px}.ds-dialog h2{font-size:22px}.ds-dialog-close{width:44px;height:44px}}@media(max-height:560px){.ds-dialog-backdrop{padding-block:10px}.ds-dialog{max-height:calc(100dvh - 20px)}.ds-dialog-content{padding-block:24px}.ds-dialog-icon{display:none}}@media(prefers-reduced-motion:reduce){.ds-dialog-close{transition:none}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Architectural Review Set",
+    "overview": "Pale-gray navigation with a right separator sits beside a cool-white working document. Blue connects selection, focus, and primary actions; restrained executor and lifecycle colors help readers distinguish meaning without tinting entire cards. Conventional controls and compact chrome leave room for the graph and its full explanations.\n\nThis is a code-led record of typography and icon polish, not a shipping verdict. Primary authority: frontend/src/tokens.css, styles.css, icons.ts, and App.tsx; related behavior remains in FlowNode.tsx, GraphInspector.tsx, NodeInspector.tsx, Dialog.tsx, fontEmbedding.ts, and exportLayout.ts. Product and direction remain in PRODUCT.md and .impeccable/surfaces/frontend.md. Current review artifacts belong in .impeccable/review/type-icons/; prior atmosphere/motion/refinement/polish images and earlier captures directly under .impeccable/review/ are historical. Actual-render review remains separate; this documentation asserts neither test results nor scope-wide shipping readiness.\n\nSelf-hosted @fontsource-variable/noto-sans-sc 5.3.1 supplies Noto Sans SC Variable via bundled unicode-range subsets, with font-display: swap and PingFang SC / Microsoft YaHei / system-ui fallbacks. No remote font service is required. exportFontCSS embeds loaded interface-font subsets after mounting export content; it does not load every shard. exportLayout.ts preserves live balanced note-column membership as independent grid columns so SVG height copying cannot force notes beyond the image edge. UI_ICON_STYLE supplies one Phosphor bold default; the routed-F brand mark remains separate. Reader and short-height dialog functions are described from source, not claimed as verified. Existing motion, atmospheric effects, graph geometry, lifecycle protections and viewport behavior remain intact.\n\nThe fake workspace card, local-file footer, decorative header breadcrumbs, “图先行再实现”, default footer instruction, and repeated approval authorization copy remain removed. Lifecycle, save, and error feedback remain; authorization details appear only in the confirmation dialog. Graph-reader tutorial and artifact promotional copy remain removed; quality warnings, full PNG export, and historical JSON/text/PNG downloads remain.",
+    "keyCharacteristics": [
+      "Pale-gray navigation, white document surfaces, pale dotted canvas.",
+      "Blue selection and action; labeled, restrained state colors.",
+      "14px interface controls, 13px metadata, and a separate 16px/1.75 full-text reading path.",
+      "Bundled Noto Sans SC Variable, Phosphor bold role-sized icons, and a routed-F brand mark; no remote assets."
+    ],
+    "rules": [
+      { "name": "The Meaning Before Color Rule", "body": "Pair executor and lifecycle colors with text or icons; reserve blue for focus, selection, navigation, and actions rather than executor identity.", "section": "colors" },
+      { "name": "The Overview Is Not Reading Rule", "body": "Below 65% zoom, adaptive node titles prioritize structure; use “100% 阅读” or the inspector for full text.", "section": "typography" },
+      { "name": "The Structural Depth Rule", "body": "Use elevation to distinguish cards, floating tools, overlays, and dialogs; retain the thin separators between persistent document regions.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep blue selection distinct from executor and lifecycle color.",
+      "Do preserve shared node geometry and provide 100% reading plus full inspector text.",
+      "Do keep save and lifecycle state visible on narrow screens; keep authorization details in the confirmation dialog.",
+      "Do retain keyboard focus, reduced-motion handling, bundled offline fonts, and consistent bold icon roles."
+    ],
+    "donts": [
+      "Don't restore the rejected navy navigation, repetitive instructional chrome, or executor-tinted cards.",
+      "Don't treat fit-to-canvas text as the reading experience or reuse tiny metadata sizes for body copy.",
+      "Don't load remote fonts, CDN assets, or external imagery for this workspace.",
+      "Don't infer a passed design review or test run from this documentation."
+    ]
+  }
+}

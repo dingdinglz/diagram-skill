@@ -69,4 +69,4 @@ The canvas uses [React Flow](https://reactflow.dev/). The diagram guidelines dra
 
 ## License
 
-[MIT](LICENSE). Bundled dependencies retain their own licenses; see [third-party notices](skills/diagram-plan/THIRD_PARTY_NOTICES.md).
+Original project code: [MIT](LICENSE). Third-party code and fonts retain their own licenses, including **MIT + Commons Clause** for the React Bits adaptations and **SIL OFL-1.1** for bundled Noto Sans SC. See [third-party notices](skills/diagram-plan/THIRD_PARTY_NOTICES.md).

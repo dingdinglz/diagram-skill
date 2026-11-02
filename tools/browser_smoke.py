@@ -83,6 +83,20 @@ def main():
             wait_for('document.querySelectorAll(".react-flow__minimap-node").length === 7')
 
             browser('wait', '400')
+            evaluate('''(()=>{
+              const serialize=XMLSerializer.prototype.serializeToString;
+              window.__exportFontEvidence=[];
+              XMLSerializer.prototype.serializeToString=function(node){
+                const svg=serialize.call(this,node);
+                if(svg.includes('export-sheet')){
+                  const doc=new DOMParser().parseFromString(svg,'image/svg+xml');
+                  const styles=[...doc.querySelectorAll('style')].map(s=>s.textContent).filter(s=>s.includes('@font-face')).join('');
+                  window.__exportFontEvidence.push({faces:(styles.match(/@font-face/g)||[]).length,embedded:(styles.match(/src:\\s*url\\(["']data:/g)||[]).length,total:document.fonts.size,fixedColumns:!!doc.querySelector('[data-export-columns="fixed"]'),notes:doc.querySelectorAll('.export-note').length});
+                }
+                return svg;
+              };
+              return true;
+            })()''')
             initial_state = cli('show', '--task', task_id)
             initial_geometry = canvas_geometry()
             browser('click', '[data-id="normalize-fields"]')
@@ -116,6 +130,9 @@ def main():
             wait_for('document.querySelector(".app-shell")?.dataset.status === "awaiting_agent" && document.querySelector(".app-shell").dataset.busy === "false"')
             handoff = cli('wait', '--task', task_id, '--timeout', '1')
             assert handoff['status'] == 'awaiting_agent' and handoff['artifacts']['hasPng']
+            font_evidence = evaluate('window.__exportFontEvidence')
+            assert font_evidence and all(0 < f['faces'] == f['embedded'] < f['total'] and f['fixedColumns'] and f['notes'] == 7 for f in font_evidence), font_evidence
+            (ARTIFACTS / 'font-embedding.json').write_text(json.dumps(font_evidence, indent=2))
             submitted = json.loads(Path(handoff['artifacts']['paths']['json']).read_text())
             assert not next(n for n in submitted['nodes'] if n['id'] == 'normalize-fields')['data']['expanded'], 'Handoff must not persist viewing preferences'
             readonly_state = cli('show', '--task', task_id)
@@ -168,7 +185,7 @@ def main():
             wait_for('document.querySelector(".app-shell")?.dataset.status === "draft"')
 
             # Manual construction really creates an empty graph, not a seeded template.
-            click('新建空白画板')
+            click('新建流程')
             browser('fill', '#new-title', '手动连接验收')
             click('创建并打开')
             wait_for('document.querySelector(".workspace-title h1")?.textContent === "手动连接验收" && document.querySelector(".app-shell").dataset.busy === "false"')
@@ -199,7 +216,8 @@ def main():
             browser('click', '.inspector-tabs button:first-child')
             # Deselect node through the pane to expose graph title.
             evaluate('document.querySelector(".react-flow__pane").dispatchEvent(new MouseEvent("click",{bubbles:true}))')
-            wait_for('!!document.querySelector("#graph-title")')
+            click('编辑流程说明')
+            wait_for('document.activeElement?.id === "graph-title"')
             race_result = evaluate('''(async () => {
               const id=new URLSearchParams(location.hash.slice(1)).get('task');
               const token=sessionStorage.getItem('flowplan:token:'+location.origin);
@@ -233,6 +251,14 @@ def main():
             wait_for('document.querySelector(".app-shell").dataset.dirty === "false" && Number(document.querySelector(".app-shell").dataset.revision) > 1')
             browser('wait', '500')
             loop_state = cli('show', '--task', loop_id)
+            # Overview cards open the same full-sized reader; tiny action links
+            # are intentionally reserved for reading scale.
+            browser('click', '[data-id=work]')
+            wait_for('!!document.querySelector(".detail-diagram")')
+            assert evaluate('document.querySelectorAll(".reader-branches button").length') == 2
+            click('100% 阅读')
+            wait_for('document.querySelector(".zoom-value")?.textContent === "100%"')
+            browser('wait', '300')
             loop_geometry = canvas_geometry()
             assert evaluate('[...document.querySelectorAll(".react-flow__edge-path")].some(p=>p.getAttribute("d").includes(" A"))'), 'Circular steps must use circular connections'
             browser('click', '[data-id=work] .node-branch-button')

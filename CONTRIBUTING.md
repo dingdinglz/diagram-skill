@@ -33,11 +33,18 @@ The browser smoke test needs [agent-browser](https://github.com/vercel-labs/agen
 npm run build
 npm run test:browser
 npm run test:connections
+npm run test:ui
 ```
 
 It uses a temporary project to exercise drawing, connections, autosave, undo/redo, feedback, agent revision, approval, history, cancellation, restart, and conflicting edits. It also checks that the app loads no external resources. Artifacts are saved to the ignored `.test-artifacts/browser-smoke/` directory.
 
 The connection smoke test checks arbitrary card-outline endpoints, reconnection, cancellation, persistence, nested tangent loops and shared-node dragging. It also uses an isolated temporary project; screenshots and complete PNG exports go to `.test-artifacts/connection-smoke/`.
+
+The UI smoke test covers search, dialog focus and dismissal, navigation at five viewport widths, mobile dialog bounds, readable canvas zoom, persistent save status, stable dock hit areas, scope keyboard controls and atmospheric materials. Aurora checks cover bounded draw rate, pointer/wheel/edit/modal pause, persistent user control, real context loss and simulated GPU initialization failure; mobile and reduced-motion modes must allocate no background canvas. Each case starts an independent browser against a temporary project. Type checks assert the 13/14/16/20px roles, loaded same-origin Noto Sans SC subsets and 320px toolbar wrapping. Reduced motion is required, not skipped: startup checks use Chromium's `--force-prefers-reduced-motion`; live preference changes use the test-only `tools/emulate_reduced_motion.mjs` CDP bridge because the installed CLI's `set media` does not apply the preference. The live check also verifies that editing focus survives and hover springs resume when motion is re-enabled.
+
+The interface uses `@fontsource-variable/noto-sans-sc` with bundled Unicode-range WOFF2 assets and visible system fallbacks. Do not replace this with a runtime font CDN. PNG export waits for layout/fonts and embeds only already-loaded subsets using `fontEmbedding.ts`; keep this path when changing fonts, and test real exported images rather than only screenshots. `exportLayout.ts` freezes the live note-column assignment before serialization to prevent CSS multicolumn overflow in the PNG; keep all note cards in the image. Browser smoke records actual embedded font rules and fixed-column/all-note evidence.
+
+The visual system is documented in `DESIGN.md`, with implementation tokens in `frontend/src/tokens.css`. Development screenshots live in the ignored `.impeccable/review/` directory.
 
 ## Package the skill
 
@@ -46,7 +53,7 @@ npm run release
 npm run test:release
 ```
 
-Packaging builds the frontend, collects dependency license texts, and writes a ZIP and SHA-256 file under `release/`. It does not upload a GitHub release. The release smoke test extracts that ZIP and checks startup, bundled assets, persistence, and restart with an empty `PATH`, so Node and npm cannot be used at runtime.
+Packaging builds the frontend, collects dependency and application-adapted source license texts, and writes a ZIP and SHA-256 file under `release/`. It does not upload a GitHub release. The release smoke test extracts that ZIP and checks startup, bundled assets, persistence, and restart with an empty `PATH`, so Node and npm cannot be used at runtime.
 
 ## Changes to the workflow
 
@@ -60,6 +67,6 @@ Use synthetic data in screenshots and examples. Keep local task state, browser s
 
 ## Dependencies and credits
 
-The editor uses React Flow, Dagre, and html-to-image. Diagram conventions are informed by [diagram-design](https://github.com/cathrynlavery/diagram-design).
+The editor uses React Flow, Dagre, html-to-image, Phosphor icons, Motion and locally bundled Noto Sans SC Variable (SIL OFL-1.1). The UI adapts [React Bits](https://reactbits.dev) Dock, RubberSegment, Aurora, SpotlightCard and GlareHover; provenance and changes are documented in `frontend/src/ui/reactbits/README.md`. Diagram conventions are informed by [diagram-design](https://github.com/cathrynlavery/diagram-design).
 
-The project is licensed under [MIT](LICENSE). Packaging copies the root `LICENSE` into the skill directory and regenerates `skills/diagram-plan/THIRD_PARTY_NOTICES.md` from the bundled dependencies, which retain their own licenses.
+Original project code is licensed under [MIT](LICENSE). Third-party code retains its own terms: the React Bits adaptations are **MIT + Commons Clause**, not plain MIT. The additional atmospheric components use native WebGL2/CSS and add no npm dependencies. Their full upstream license is in `skills/diagram-plan/licenses/react-bits-LICENSE.md`. Packaging copies the root `LICENSE` into the skill directory and regenerates `THIRD_PARTY_NOTICES.md` from bundled dependencies and retained source licenses; both the notices and license directory ship in the ZIP.

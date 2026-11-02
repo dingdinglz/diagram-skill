@@ -1,0 +1,38 @@
+/* React Bits application adaptations. Full provenance/license: README.md. */
+.aurora-background { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: radial-gradient(ellipse at 12% 0%, #e6edfb 0%, transparent 58%), radial-gradient(ellipse at 100% 10%, #e3f0ee 0%, transparent 52%), linear-gradient(180deg, #f4f7fc, var(--canvas) 78%); }
+.aurora-background canvas { display: block; width: 100%; height: 100%; }
+.canvas-area > .react-flow { z-index: 1; background: transparent; }
+.canvas-area > .canvas-legend { z-index: 2; }
+.ambient-toggle { margin-left: auto; }
+.ambient-toggle[aria-pressed=true] { color: var(--accent); background: var(--accent-soft); }
+.ambient-toggle-empty { position: absolute; top: 18px; right: 18px; z-index: 5; background: #ffffffc7; border: 1px solid var(--line); }
+
+.spotlight-card { position: relative; isolation: isolate; }
+.spotlight-light, .spotlight-rim { position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 240ms var(--ease-out); }
+.spotlight-rim { inset: -1px; padding: 1px; mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); mask-composite: exclude; }
+@media (hover: hover) and (pointer: fine) {
+  .spotlight-card[data-spotlight=ready]:hover > .spotlight-light { opacity: .12; }
+  .spotlight-card[data-spotlight=ready]:hover > .spotlight-rim { opacity: .6; }
+}
+.spotlight-card[data-spotlight=ready]:has(:focus-visible) > .spotlight-light { opacity: .09; }
+.spotlight-card[data-spotlight=ready]:has(:focus-visible) > .spotlight-rim { opacity: .5; }
+.empty-canvas.spotlight-card { z-index: 2; width: 480px; padding: 40px 32px; border: 1px solid #d8e2f1; border-radius: 18px; background: #fffffff2; box-shadow: 0 18px 48px -24px #31578030, 0 2px 8px #31578008; }
+
+.glare-hover { position: relative; isolation: isolate; }
+.glare-surface { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; border-radius: inherit; }
+.glare-band { position: absolute; top: -100%; left: -60%; width: 45%; height: 300%; background: var(--glare-band); transform: translateX(0) skewX(-24deg); }
+@keyframes material-sheen { to { transform: translateX(430%) skewX(-24deg); } }
+@media (hover: hover) and (pointer: fine) {
+  .glare-hover:not(:disabled):hover .glare-band { animation: material-sheen 650ms cubic-bezier(.45, 0, .55, 1) both; }
+}
+.glare-hover:not(:disabled):focus-visible .glare-band { animation: material-sheen 650ms cubic-bezier(.45, 0, .55, 1) both; }
+.button.primary.glare-hover:focus-visible { background: var(--accent-hover); border-color: var(--accent-hover); }
+@media (max-width: 760px), (hover: none), (pointer: coarse) {
+  .ambient-toggle { display: none !important; }
+}
+@media (max-width: 760px) {
+  .empty-canvas.spotlight-card { padding: 30px 20px; border-radius: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spotlight-light, .spotlight-rim, .glare-surface { display: none; }
+}

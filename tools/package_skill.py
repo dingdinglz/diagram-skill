@@ -14,8 +14,8 @@ def third_party_notices():
     packages = subprocess.check_output(
         ['npm', 'ls', '--omit=dev', '--parseable', '--all'], cwd=str(ROOT), universal_newlines=True
     ).splitlines()
-    sections = ['# Third-party notices\n\nBundled JavaScript dependencies and their transitive dependencies. '
-                'Project code is covered by the accompanying LICENSE. Dependencies retain their own licenses, reproduced below.\n']
+    sections = ['# Third-party notices\n\nBundled JavaScript dependencies, their transitive dependencies, and application-adapted source. '
+                'Original project code is covered by the accompanying LICENSE. Third-party code retains its own licenses, reproduced below.\n']
     missing = []
     for path in sorted(set(packages)):
         directory = Path(path)
@@ -34,6 +34,11 @@ def third_party_notices():
             sections.append('\n### {}\n\n```text\n{}\n```\n'.format(license_file.name, license_file.read_text(encoding='utf-8', errors='replace').strip()))
     if missing:
         raise SystemExit('Missing license texts; resolve before distributing: ' + ', '.join(missing))
+    # Application-adapted source is not an npm dependency; keep its license in
+    # generated notices as well as the release archive's licenses directory.
+    for license_file in sorted((SKILL / 'licenses').glob('*LICENSE*')):
+        sections.append('\n## Application-adapted source: {}\n\n{}\n'.format(
+            license_file.name, license_file.read_text(encoding='utf-8').strip()))
     (SKILL / 'THIRD_PARTY_NOTICES.md').write_text('\n'.join(sections), encoding='utf-8')
 
 

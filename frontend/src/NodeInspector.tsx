@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ArrowLeft, ChevronRight, Pencil, Trash2 } from 'lucide-react';
+import { useLayoutEffect, useRef, useState } from 'react';
+import { ArrowLeft, ChevronRight, Pencil, Trash2 } from './icons';
 import type { Graph, Executor, NodeKind, FlowRole } from './types';
 import { EXECUTOR_LABELS, KIND_LABELS } from './types';
 import { Markdown } from './Markdown';
@@ -14,11 +14,19 @@ export function NodeInspector({ graph, selectedId, initialScope, editable, onEdi
   const selectedGroup=groupsOf(graph).find(g=>g.id===selectedId);
   const [trail,setTrail]=useState<Page[]>([{nodeId:selectedId},...(initialScope?[{scope:initialScope}]:selectedGroup?[{scope:{groupId:selectedId}}]:[])]);
   const [editing,setEditing]=useState(false);
+  const headingRef=useRef<HTMLHeadingElement>(null);
+  const focusNext=useRef<'reader'|'editor'|null>(null);
+  const editMode=(value:boolean)=>{focusNext.current=value?'editor':'reader';setEditing(value);};
+  useLayoutEffect(()=>{
+    if(focusNext.current==='editor')document.getElementById('node-label')?.focus();
+    else if(focusNext.current==='reader')headingRef.current?.focus({preventScroll:true});
+    focusNext.current=null;
+  },[editing,trail]);
   const current=trail[trail.length-1];
   const node=graph.nodes.find(n=>n.id===current.nodeId);
   const group=groupsOf(graph).find(g=>g.id===(current.scope?.groupId||current.nodeId));
   const view=current.scope?buildView(graph,current.scope,true):null;
-  const push=(page:Page)=>{setEditing(false);setTrail(t=>[...t,page]);};
+  const push=(page:Page)=>{focusNext.current='reader';setEditing(false);setTrail(t=>[...t,page]);};
   const visit=(n:ViewNode)=>n.groupId?push({scope:{groupId:n.groupId}}):push({nodeId:n.members[0]});
   const update=(patch:Partial<NonNullable<typeof node>['data']>)=>{
     if(!node)return;
@@ -28,10 +36,9 @@ export function NodeInspector({ graph, selectedId, initialScope, editable, onEdi
   const main=buildView(graph);
   const branches:BranchLink[]=node?(main.branches[node.id]||graph.edges.filter(e=>e.source===node.id&&(e.role==='exception'||e.role==='support'||graph.nodes.find(n=>n.id===e.target)?.data.role==='exception')).map(e=>({edgeId:e.id,label:e.label||'查看分支',target:e.target,exception:e.role==='exception'}))):(main.branches[current.scope?.branchEdgeId ? selectedId : group?.id || ''] || []);
   return <section className="node-reader" aria-label="节点阅读详情">
-    {trail.length>1&&<button className="reader-back" onClick={()=>{setTrail(t=>t.slice(0,-1));setEditing(false);}}><ArrowLeft size={14}/>返回上层</button>}
+    {trail.length>1&&<button className="reader-back" onClick={()=>{focusNext.current='reader';setTrail(t=>t.slice(0,-1));setEditing(false);}}><ArrowLeft size={14}/>返回上层</button>}
     {current.scope?<>
-      <span className="reader-kicker">{group?.kind==='loop'?'循环':group?'子流程':'分支流程'}</span>
-      <h2>{view!.title}</h2>{view!.summary&&<p className="reader-summary">{view!.summary}</p>}
+      <h2 ref={headingRef} tabIndex={-1}>{view!.title}</h2>{view!.summary&&<p className="reader-summary">{view!.summary}</p>}
       <DetailDiagram key={JSON.stringify(current.scope)} graph={graph} scope={current.scope} onNode={visit}/>
       {group&&editable&&<details className="group-editor"><summary>编辑分组说明</summary>
         <label className="field-label">分组名称<input value={group.label} onChange={e=>onEdit({...graph,groups:groupsOf(graph).map(g=>g.id===group.id?{...g,label:e.target.value}:g)})}/></label>
@@ -40,11 +47,11 @@ export function NodeInspector({ graph, selectedId, initialScope, editable, onEdi
     </>:node?<>
       <div className="selection-heading"><span className="kind-badge">{KIND_LABELS[node.type]}</span><span className="reader-executor">{EXECUTOR_LABELS[node.data.executor]}</span></div>
       {!editing || !editable?<>
-        <h2>{node.data.label}</h2>{node.data.summary&&<p className="reader-summary">{node.data.summary}</p>}
+        <h2 ref={headingRef} tabIndex={-1}>{node.data.label}</h2>{node.data.summary&&<p className="reader-summary">{node.data.summary}</p>}
         <div className="reader-notes"><Markdown text={node.data.notes||'暂无补充说明。'}/></div>
-        {editable&&<button className="button secondary" aria-label="编辑节点" onClick={()=>setEditing(true)}><Pencil size={14}/>编辑节点</button>}
+        {editable&&<button className="button secondary" aria-label="编辑节点" onClick={()=>editMode(true)}><Pencil size={14}/>编辑节点</button>}
       </>:<>
-        <button className="reader-back" onClick={()=>setEditing(false)}><ArrowLeft size={14}/>返回阅读</button>
+        <button className="reader-back" onClick={()=>editMode(false)}><ArrowLeft size={14}/>返回阅读</button>
         <label className="field-label" htmlFor="node-label">动作标题</label><textarea id="node-label" rows={2} value={node.data.label} onChange={e=>update({label:e.target.value})}/>
         <label className="field-label" htmlFor="node-summary">一句话解释</label><textarea id="node-summary" rows={2} value={node.data.summary||''} onChange={e=>update({summary:e.target.value})}/>
         <div className="field-row"><label>节点类型<select value={node.type} onChange={e=>onEdit({...graph,nodes:graph.nodes.map(n=>n.id===node.id?{...n,type:e.target.value as NodeKind}:n)})}>{Object.entries(KIND_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label><label>执行主体<select value={node.data.executor} onChange={e=>update({executor:e.target.value as Executor})}>{Object.entries(EXECUTOR_LABELS).map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label></div>

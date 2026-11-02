@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Minus, Plus, Maximize } from 'lucide-react';
+import { Minus, Plus, Maximize } from './icons';
 import { createScene, type Scene } from './geometry';
 import { buildView, type ViewNode, type ViewScope } from './views';
 import type { Graph } from './types';

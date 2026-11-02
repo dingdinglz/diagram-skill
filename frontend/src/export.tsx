@@ -7,6 +7,9 @@ import { Markdown } from './Markdown';
 import { exportViews } from './views';
 import { createScene } from './geometry';
 import { SceneDiagram } from './SceneDiagram';
+import { exportFontCSS } from './fontEmbedding';
+import { stabilizeExportNotes } from './exportLayout';
+import { IconContext, UI_ICON_STYLE } from './icons';
 
 function ExportDocument({ graph, onReady }: { graph: Graph; onReady: (element: HTMLElement) => void }) {
   const root = useRef<HTMLDivElement>(null);
@@ -46,17 +49,18 @@ export async function renderGraphPng(graph: Graph): Promise<string> {
   try {
     const element = await new Promise<HTMLElement>((resolve, reject) => {
       timer = setTimeout(() => reject(new Error('导出视图准备超时，请重试。')), 12000);
-      reactRoot.render(<ExportDocument graph={graph} onReady={resolve} />);
+      reactRoot.render(<IconContext.Provider value={UI_ICON_STYLE}><ExportDocument graph={graph} onReady={resolve} /></IconContext.Provider>);
     });
     clearTimeout(timer);
-    await document.fonts.ready;
+    const fontEmbedCSS = await exportFontCSS(element);
+    stabilizeExportNotes(element);
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     if (Number(element.dataset.graphScale) < 0.55) throw new Error('节点分布过宽，缩放后将无法阅读。请使用“整理布局”或缩短节点间距，再导出。');
     const width = element.scrollWidth, height = element.scrollHeight;
     // Match the stdlib backend's 8192px / 16 Mi-pixel / 5 MiB PNG limits.
     const ratio = Math.min(1.5, 8192 / width, 8192 / height, Math.sqrt((16 * 1024 * 1024) / (width * height)));
     if (ratio < 0.75 || width > 10000 || height > 18000) throw new Error('图或说明过大，无法生成清晰完整的 PNG。请先整理布局或精简说明，再提交；草稿已保留。');
-    const png = await toPng(element, { backgroundColor: '#fbfaf7', pixelRatio: ratio, width, height, skipFonts: true, cacheBust: false });
+    const png = await toPng(element, { backgroundColor: '#ffffff', pixelRatio: ratio, width, height, fontEmbedCSS, skipFonts: true, cacheBust: false });
     if (!png.startsWith('data:image/png;base64,') || png.length < 100) throw new Error('PNG 渲染失败，未提交任何批准。');
     if ((png.length - 22) * .75 > 5 * 1024 * 1024) throw new Error('PNG 超过 5 MiB 上限，请精简说明或拆分本次规划。草稿已保留，未提交批准。');
     return png;

@@ -1,38 +1,64 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
-import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, Controls, MiniMap, ViewportPortal, useReactFlow, getViewportForBounds, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
-import { ArrowDown, ArrowDownToLine, ArrowLeft, ArrowRight, Check, CheckCheck, ChevronRight, CircleDot, Clock3, Code2, Diamond, FileJson, Flag, GitBranch, History, Layers2, LayoutGrid, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Square, Trash2, Undo2, X, AlertCircle, Pause, LockKeyhole, Image, FileText, FolderOpen } from 'lucide-react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, MiniMap, ViewportPortal, useReactFlow, useViewport, getViewportForBounds, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
+import { ArrowDown, ArrowDownToLine, ArrowRight, Check, CheckCheck, ChevronRight, Clock3, FileJson, GitBranch, History, LayoutGrid, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Trash2, Undo2, X, AlertCircle, Pause, Image, FileText, Search, PanelLeft, Keyboard, Minus, BookOpen, NODE_ICONS, AmbientLight, IconContext, UI_ICON_STYLE } from './icons';
+import { BrandMark } from './BrandMark';
+import { LayoutGroup, MotionConfig, motion } from 'motion/react';
+import { ContentTransition, SelectionIndicator, UI_TRANSITION } from './ui/Motion';
+import { NodeDock } from './ui/reactbits/NodeDock';
+import { FlowScope } from './ui/reactbits/FlowScope';
+import { Aurora } from './ui/reactbits/Aurora';
+import { SpotlightCard } from './ui/reactbits/SpotlightCard';
+import { GlareHover } from './ui/reactbits/GlareHover';
+import { useReducedMotion } from './ui/useReducedMotion';
 import FlowNode, { LoopArea, type CanvasNode } from './FlowNode';
 import { FlowEdge, type RoutedEdge } from './FlowEdge';
 import { moveItem, groupsOf, upgradeGraph, NODE_WIDTH, NODE_HEIGHT, type ViewScope } from './views';
 import { createRootScene, nodePorts } from './geometry';
 import { closestOutlinePoint, containsRounded, outlineAnchor, projectAnchor, type Point } from './anchors';
 import { NodeInspector } from './NodeInspector';
-import { Markdown } from './Markdown';
+import { Dialog } from './Dialog';
+import { GraphInspector } from './GraphInspector';
 import { useWorkspace } from './useWorkspace';
 import { api, downloadArtifact, hasToken } from './api';
 import { approvalIssues, createNode, graphWarnings, layoutGraph, newId, removeNodes, removeEdges, reconnectGraphEdge } from './model';
-import type { Graph, GraphNode, HistoricalVersion, NodeKind, Executor } from './types';
-import { KIND_LABELS, EXECUTOR_LABELS, STATUS_LABELS, VERSION_LABELS } from './types';
+import type { HistoricalVersion, NodeKind } from './types';
+import { STATUS_LABELS, VERSION_LABELS } from './types';
 
 const nodeTypes = { start: FlowNode, step: FlowNode, decision: FlowNode, end: FlowNode, 'loop-area': LoopArea };
 const edgeTypes = { routed: FlowEdge };
-const palette = [{ type: 'start', Icon: CircleDot, hint: '入口或触发' }, { type: 'step', Icon: Square, hint: '一个明确动作' }, { type: 'decision', Icon: Diamond, hint: '标明分支条件' }, { type: 'end', Icon: Flag, hint: '结果或终点' }] as const;
 const time = (iso: string) => new Date(iso).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
 type ConnectionEnd = { nodeId: string; anchor: Point };
 type ConnectionDrag = { pointerId: number; initialClient: Point; fixed: Point; pointer: Point; from: ConnectionEnd; edgeId?: string; endpoint?: 'source' | 'target'; candidate?: ConnectionEnd };
 
 function Workspace() {
   const ws = useWorkspace();
+  const reducedMotion = useReducedMotion();
   const flow = useReactFlow<CanvasNode>();
+  const { zoom } = useViewport();
   const canvas = useRef<HTMLDivElement>(null);
+  const inspectorContent = useRef<HTMLDivElement>(null);
+  const inspectorRef = useRef<HTMLElement>(null);
+  const panelToggleRef = useRef<HTMLButtonElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [panel, setPanel] = useState<'details' | 'history'>('details');
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 1100);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [taskSearch, setTaskSearch] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const [narrow, setNarrow] = useState(() => window.innerWidth <= 760);
   const [historical, setHistorical] = useState<HistoricalVersion | null>(null);
   const [showBranches, setShowBranches] = useState(false);
+  const [ambientEnabled, setAmbientEnabled] = useState(() => {
+    try { return localStorage.getItem('flowplan:ambient-motion') !== 'off'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('flowplan:ambient-motion', ambientEnabled ? 'on' : 'off'); } catch { /* Storage can be unavailable. */ }
+  }, [ambientEnabled]);
   const [detailScope, setDetailScope] = useState<ViewScope | undefined>();
-  const [dialog, setDialog] = useState<'new' | 'feedback' | 'approve' | 'cancel' | null>(null);
+  const [dialog, setDialog] = useState<'new' | 'feedback' | 'approve' | 'cancel' | 'shortcuts' | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [feedback, setFeedback] = useState('');
   const [versionLoading, setVersionLoading] = useState(false);
@@ -48,10 +74,86 @@ function Workspace() {
   const warnings = graphWarnings(displayGraph);
 
   useEffect(() => {
-    setSelectedNodeId(null); setSelectedEdgeId(null); setHistorical(null); setShowBranches(false); setDetailScope(undefined);
+    setSelectedNodeId(null); setSelectedEdgeId(null); setHistorical(null); setShowBranches(false); setDetailScope(undefined); setSidebarOpen(false);
   }, [ws.task?.id]);
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 760px)');
+    const update = () => { setNarrow(media.matches); setSidebarOpen(false); if (media.matches) setPanelOpen(false); };
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (!sidebarOpen || !narrow) return;
+    const previous = document.activeElement as HTMLElement | null;
+    searchRef.current?.focus();
+    const trap = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.stopImmediatePropagation(); setSidebarOpen(false); }
+      if (event.key !== 'Tab') return;
+      const items = [...(sidebarRef.current?.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input') || [])];
+      const first = items[0], last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', trap, true);
+    return () => { document.removeEventListener('keydown', trap, true); previous?.focus(); };
+  }, [sidebarOpen, narrow]);
+  useEffect(() => {
+    if (!narrow || !panelOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    inspectorRef.current?.focus({ preventScroll: true });
+    return () => {
+      requestAnimationFrame(() => {
+        if (previous?.isConnected && !previous.closest('[inert]') && previous.getClientRects().length) previous.focus({ preventScroll: true });
+        else panelToggleRef.current?.focus({ preventScroll: true });
+      });
+    };
+  }, [narrow, panelOpen]);
   useEffect(() => { setDetailScope(undefined); setShowBranches(false); }, [historical?.id]);
+  useEffect(() => { if (inspectorContent.current) inspectorContent.current.scrollTop = 0; }, [selectedNodeId, selectedEdgeId, panel, historical?.id, ws.task?.id]);
   const scene = useMemo(() => createRootScene(displayGraph, showBranches, nodeMeasurements), [displayGraph, showBranches, nodeMeasurements]);
+  const fitCanvas = useCallback((duration = 0) => {
+    const box = canvas.current?.getBoundingClientRect();
+    if (!box?.width || !box.height) return;
+    const topInset = (toolbarRef.current?.offsetHeight || 52) + 24;
+    const usableHeight = Math.max(100, box.height - topInset - 100);
+    const viewport = getViewportForBounds(scene.bounds, box.width, usableHeight, .15, 1, .06);
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    void flow.setViewport({ ...viewport, y: viewport.y + topInset }, { duration: reduced ? 0 : duration });
+  }, [flow, scene.bounds]);
+  const readCanvas = () => {
+    const box = canvas.current?.getBoundingClientRect();
+    const node = view.nodes.find(node => node.id === selectedNodeId) || view.nodes[0];
+    if (!box || !node) return;
+    const topInset = (toolbarRef.current?.offsetHeight || 52) + 24;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    void flow.setViewport({ x: box.width / 2 - node.position.x - NODE_WIDTH / 2, y: topInset - node.position.y, zoom: 1 }, { duration: reduced ? 0 : 250 });
+  };
+  const zoomCanvas = (direction: 'in' | 'out') => {
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180;
+    if (direction === 'in') void flow.zoomIn({ duration }); else void flow.zoomOut({ duration });
+  };
+  const fitCanvasRef = useRef(fitCanvas);
+  fitCanvasRef.current = fitCanvas;
+  useEffect(() => {
+    const element = canvas.current;
+    if (!element) return;
+    let frame = 0;
+    let previous = { width: element.clientWidth, height: element.clientHeight };
+    const observer = new ResizeObserver(() => {
+      const next = { width: element.clientWidth, height: element.clientHeight };
+      if (Math.abs(next.width - previous.width) < 1 && Math.abs(next.height - previous.height) < 1) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        // Keep the same graph point centered when the inspector or window resizes.
+        // A layout change is not an instruction to discard the user's zoom/pan.
+        const viewport = flow.getViewport();
+        void flow.setViewport({ ...viewport, x: viewport.x + (next.width - previous.width) / 2, y: viewport.y + (next.height - previous.height) / 2 });
+        previous = next;
+      });
+    });
+    observer.observe(element);
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, [flow, ws.task?.id, historical?.id]);
   const fittedView = useRef('');
   useEffect(() => {
     const key = `${ws.task?.id || ''}:${historical?.id || 'current'}`;
@@ -62,7 +164,7 @@ function Workspace() {
       fittedView.current = key;
       // Initialize from the projected scene, including groups. The provider may
       // still hold the previous task's measured nodes during a task switch.
-      void flow.setViewport(getViewportForBounds(scene.bounds, box.width, box.height, .15, 1, .16));
+      fitCanvasRef.current();
     });
     return () => cancelAnimationFrame(frame);
   }, [ws.task?.id, historical?.id, scene.bounds, flow]);
@@ -200,13 +302,16 @@ function Workspace() {
     const measurements: Record<string, { width: number; height: number }> = {};
     flow.getNodes().forEach(n => { if (n.measured?.width && n.measured?.height) measurements[n.id] = { width: n.measured.width, height: n.measured.height }; });
     ws.edit(layoutGraph(ws.graph, measurements));
-    setTimeout(() => flow.fitView({ padding: .22, duration: 300, maxZoom: 1 }), 100);
+    setTimeout(() => fitCanvasRef.current(250), 100);
   };
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (dialog) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSidebarOpen(true); searchRef.current?.focus(); return; }
       if ((event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return;
-      if (event.key === 'Escape') { if (!ws.busy) setDialog(null); setSelectedEdgeId(null); setSelectedNodeId(null); return; }
-      if (dialog || historical) return;
+      if (event.key === 'Escape') { setSidebarOpen(false); if (narrow) setPanelOpen(false); setSelectedEdgeId(null); setSelectedNodeId(null); return; }
+      if (event.key === '?') { setDialog('shortcuts'); return; }
+      if (historical) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? ws.redo() : ws.undo(); }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (editable) void ws.perform('checkpoint'); }
       if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); deleteSelection(); }
@@ -219,7 +324,7 @@ function Workspace() {
     try {
       await ws.flush();
       setHistorical(await api.version(ws.task.id, versionId)); setSelectedNodeId(null); setSelectedEdgeId(null);
-      setTimeout(() => flow.fitView({ padding: .2, maxZoom: 1 }), 100);
+      setTimeout(() => fitCanvasRef.current(250), 100);
     } catch (e) { ws.report(e); }
     finally { setVersionLoading(false); }
   };
@@ -229,34 +334,43 @@ function Workspace() {
   };
   const restoreVersion = async (id: string) => { if (await ws.perform('restore', { versionId: id })) { setHistorical(null); setPanel('details'); } };
 
-  return <div className={`app-shell ${panelOpen ? '' : 'inspector-hidden'}`} data-status={ws.task?.status || 'empty'} data-revision={ws.task?.revision || 0} data-dirty={ws.dirty} data-busy={!!ws.busy}>
-    <aside className="sidebar">
-      <a className="brand" href="#" onClick={event => event.preventDefault()} aria-label="Flowplan 图先行"><span className="brand-mark"><GitBranch size={22} /></span><span>Flowplan<small>图先行 · 再实现</small></span></a>
-      <div className="sidebar-section-label">你的规划空间 <span>LOCAL</span></div>
-      <button className="new-task-button" onClick={() => { setNewTitle(''); setDialog('new'); }} disabled={!!ws.busy || ws.conflict}><Plus size={16} />新建空白画板</button>
+  const filteredTasks = ws.tasks.filter(task => (task.title || '未命名流程').toLocaleLowerCase().includes(taskSearch.trim().toLocaleLowerCase()));
+
+  const ambientControl = <button type="button" className={`icon-button ambient-toggle ${!displayGraph.nodes.length ? 'ambient-toggle-empty' : ''}`}
+    aria-label={reducedMotion ? '背景动效已关闭' : ambientEnabled ? '暂停背景动效' : '开启背景动效'}
+    title={reducedMotion ? '系统已减少动态效果' : ambientEnabled ? '暂停背景动效' : '开启背景动效'}
+    aria-pressed={ambientEnabled && !reducedMotion} disabled={reducedMotion}
+    onClick={() => setAmbientEnabled(value => !value)}><AmbientLight size={20} /></button>;
+
+  return <div className={`app-shell ${panelOpen ? '' : 'inspector-hidden'} ${sidebarOpen ? 'sidebar-open' : ''}`} data-status={ws.task?.status || 'empty'} data-revision={ws.task?.revision || 0} data-dirty={ws.dirty} data-busy={!!ws.busy} data-reduced-motion={!!reducedMotion}>
+    {sidebarOpen && narrow && <button className="sidebar-backdrop" aria-label="关闭任务导航" onClick={() => setSidebarOpen(false)} />}
+    <aside ref={sidebarRef} className="sidebar" aria-label="工作区导航" role={sidebarOpen && narrow ? 'dialog' : undefined} aria-modal={sidebarOpen && narrow ? true : undefined} inert={narrow && !sidebarOpen}>
+      <div className="brand-row"><a className="brand" href="#" onClick={event => event.preventDefault()} aria-label="Flowplan"><span className="brand-mark"><BrandMark /></span><span>Flowplan</span></a><button className="icon-button mobile-only" aria-label="收起任务导航" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
+      <label className="task-search"><Search size={15} /><input ref={searchRef} aria-label="搜索流程" placeholder="搜索流程…" value={taskSearch} onChange={event => setTaskSearch(event.target.value)} /><kbd>⌘ K</kbd></label>
+      <button className="new-task-button" onClick={() => { setNewTitle(''); setSidebarOpen(false); setDialog('new'); }} disabled={!!ws.busy || ws.conflict}><Plus size={16} />新建流程</button>
+      <div className="sidebar-section-label"><span>流程</span><span className="task-count">{ws.tasks.length}</span></div>
       <nav className="task-list" aria-label="任务列表">
-        {ws.tasks.map(task => <button key={task.id} className={`task-item ${ws.task?.id === task.id ? 'active' : ''}`} onClick={() => void ws.openTask(task.id)} disabled={!!ws.busy || ws.conflict}>
-          <span className={`task-dot status-${task.status}`} /><span className="task-item-text">{task.title || '未命名流程'}<small>{STATUS_LABELS[task.status]} · {time(task.updatedAt)}</small></span>{ws.task?.id === task.id && <ChevronRight size={13} />}
+        {filteredTasks.map(task => <button key={task.id} className={`task-item ${ws.task?.id === task.id ? 'active' : ''}`} aria-current={ws.task?.id === task.id ? 'page' : undefined} title={`${task.title || '未命名流程'} · ${STATUS_LABELS[task.status]} · ${time(task.updatedAt)}`} onClick={() => { setSidebarOpen(false); void ws.openTask(task.id); }} disabled={!!ws.busy || ws.conflict}>
+          {ws.task?.id === task.id && <SelectionIndicator id="task-selection" className="task-selection" />}
+          <FileText size={18} className="task-icon" /><span className="task-item-text">{task.title || '未命名流程'}{task.status !== 'draft' && <small><span className={`task-dot status-${task.status}`} />{STATUS_LABELS[task.status]}</small>}</span>
         </button>)}
-        {ws.initialized && !ws.tasks.length && <p className="sidebar-empty">每个任务，一张清晰的图。<br />历史会保留在当前项目中。</p>}
+        {taskSearch && !filteredTasks.length && <div className="sidebar-empty"><Search size={20} /><p>没有匹配的流程</p><button onClick={() => setTaskSearch('')}>清除搜索</button></div>}
+        {ws.initialized && !ws.tasks.length && !taskSearch && <p className="sidebar-empty">暂无流程</p>}
       </nav>
-      <div className="node-palette">
-        <div className="sidebar-section-label">绘图工具 <MousePointer2 size={12} /></div>
-        {palette.map(({ type, Icon, hint }) => <button key={type} className="palette-button" disabled={!editable} onClick={() => addNode(type)} aria-label={`添加${KIND_LABELS[type]}`}><span className={`palette-icon palette-${type}`}><Icon size={17} /></span><span>{KIND_LABELS[type]}<small>{hint}</small></span><Plus size={13} /></button>)}
-        <p className="palette-tip">从卡片边缘任意位置拖出箭头。<br />选中连线后，可拖动两端。</p>
-      </div>
-      <div className="sidebar-footer"><ShieldCheck size={15} /><span>只在你的电脑上<small>本地文件 · 无模型密钥</small></span></div>
+      <div className="sidebar-bottom"><button className="sidebar-help" onClick={() => { setSidebarOpen(false); setDialog('shortcuts'); }}><Keyboard size={16} /><span>快捷键</span><kbd>?</kbd></button></div>
     </aside>
 
-    <main className="workspace">
+    <main className="workspace" inert={narrow && sidebarOpen}>
       <header className="workspace-header">
-        <div className="workspace-title"><div className="breadcrumb"><FolderOpen size={12} /><span>规划空间</span><ChevronRight size={12} /><span>{historical ? '历史快照' : '核心流程'}</span></div><h1>{displayGraph.title || '把想法画清楚'}</h1></div>
+        <button className="icon-button mobile-only" aria-label="打开任务导航" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><PanelLeft size={19} /></button>
+        <div className="workspace-title"><h1 title={displayGraph.title}>{displayGraph.title || '开始你的下一份计划'}</h1></div>
         <div className="header-actions">
           {ws.task && <span className={`status-pill status-${ws.task.status}`}><span />{STATUS_LABELS[ws.task.status]}</span>}
-          <span className={`save-indicator ${!ws.online ? 'offline' : ''}`}>{!ws.online ? '连接中断' : ws.saving ? '保存中…' : ws.dirty ? '未保存' : ws.task ? <><Check size={12} />已保存</> : '本地工作区'}</span>
-          <div className="header-separator" />
-          <button className={`button subtle ${panel === 'history' && panelOpen ? 'active' : ''}`} onClick={() => { setPanel('history'); setPanelOpen(true); }} disabled={!ws.task}><History size={15} /><span>历史</span>{!!ws.task?.versions.length && <span className="count-badge">{ws.task.versions.length}</span>}</button>
-          <button className="icon-button" aria-label={panelOpen ? '收起详情面板' : '展开详情面板'} onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? <PanelRightClose size={18} /> : <PanelRightOpen size={18} />}</button>
+          <span role="status" className={`save-indicator ${!ws.online ? 'offline' : ''}`}>{!ws.online ? '连接中断' : ws.saving ? '保存中…' : ws.dirty ? '未保存' : ws.task ? <><Check size={12} />已保存</> : '本地工作区'}</span>
+          {!!ws.task && <div className="header-separator" />}
+          {!!displayGraph.nodes.length && <button className="icon-button export-button" aria-label="导出完整 PNG" title="导出完整 PNG（含所有说明）" onClick={() => void ws.exportPng()} disabled={!!ws.busy || !!historical}><ArrowDownToLine size={18} /></button>}
+          {!!ws.task && <><button className={`button subtle ${panel === 'history' && panelOpen ? 'active' : ''}`} aria-label="查看版本历史" onClick={() => { setPanel('history'); setPanelOpen(true); }} disabled={!ws.task}><History size={15} /><span>历史</span>{!!ws.task?.versions.length && <span className="count-badge">{ws.task.versions.length}</span>}</button>
+          <button ref={panelToggleRef} className="icon-button" aria-controls="workspace-inspector" aria-expanded={panelOpen} aria-label={panelOpen ? '收起详情面板' : '展开详情面板'} onClick={() => setPanelOpen(!panelOpen)}>{panelOpen ? <PanelRightClose className="right-panel-icon" size={20} /> : <PanelRightOpen className="right-panel-icon" size={18} />}</button></>}
         </div>
       </header>
 
@@ -266,16 +380,19 @@ function Workspace() {
       {historical && <div className="history-view-banner"><History size={15} /><span>正在查看 {historical.id} · {VERSION_LABELS[historical.kind] || historical.kind} · 只读</span><button onClick={() => { setHistorical(null); setSelectedNodeId(null); setSelectedEdgeId(null); }}>回到当前版本 <ArrowRight size={13} /></button></div>}
 
       <div className="editor-body">
-        <div className="canvas-area" ref={canvas}>
-          {!!ws.task && <div className="canvas-toolbar">
+        <div className={`canvas-area ${zoom < .65 ? 'is-overview' : ''}`} style={{ '--canvas-zoom': zoom } as CSSProperties} ref={canvas} inert={narrow && panelOpen}>
+          <Aurora enabled={ambientEnabled} paused={!!dialog || !!ws.busy || !!connectionDrag || (narrow && (panelOpen || sidebarOpen))} />
+          {!displayGraph.nodes.length && ambientControl}
+          {!!ws.task && !!displayGraph.nodes.length && <div ref={toolbarRef} className="canvas-toolbar" role="toolbar" aria-label="画布操作">
+            <span className="canvas-view-label">画布</span><span className="toolbar-divider" />
             <button className="icon-button" title="撤销 ⌘/Ctrl Z" aria-label="撤销" onClick={ws.undo} disabled={!editable || !ws.canUndo}><Undo2 size={17} /></button>
             <button className="icon-button" title="重做 ⌘/Ctrl Shift Z" aria-label="重做" onClick={ws.redo} disabled={!editable || !ws.canRedo}><Redo2 size={17} /></button>
             <span className="toolbar-divider" />
-            {displayGraph.schemaVersion === 2 && <div className="view-switch" aria-label="流程显示范围"><button aria-pressed={!showBranches} onClick={() => setShowBranches(false)}>主线</button><button aria-pressed={showBranches} onClick={() => setShowBranches(true)}>显示分支</button></div>}
-            <button className="toolbar-text-button" onClick={autoLayout} disabled={!editable || !displayGraph.nodes.length}><LayoutGrid size={15} />整理布局</button>
+            {displayGraph.schemaVersion === 2 && <FlowScope branches={showBranches} onChange={setShowBranches} />}
+            <button className="toolbar-text-button auto-layout" aria-label="整理布局" title="整理布局" onClick={autoLayout} disabled={!editable || !displayGraph.nodes.length}><LayoutGrid size={18} /><span>整理布局</span></button>
             <span className="toolbar-divider" />
-            <button className="icon-button" aria-label="适应画布" title="适应画布" onClick={() => void flow.fitView({ padding: .2, maxZoom: 1, duration: 250 })}><Maximize size={16} /></button>
-            <button className="icon-button" aria-label="导出完整 PNG" title="导出完整 PNG（含所有说明）" onClick={() => void ws.exportPng()} disabled={!!ws.busy || !!historical || !displayGraph.nodes.length}><ArrowDownToLine size={17} /></button>
+            <button className="toolbar-text-button readable-view" onClick={readCanvas} disabled={!displayGraph.nodes.length} title="以原始字号阅读选中节点；拖动画布查看相邻步骤"><BookOpen size={15} />100% 阅读</button>
+            {ambientControl}
           </div>}
           <ReactFlow<CanvasNode, RoutedEdge> key={`${ws.task?.id || 'empty'}-${historical?.id || 'current'}`} nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
             onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onConnect={connect}
@@ -286,7 +403,7 @@ function Workspace() {
             onNodeDragStart={ws.beginDrag} onNodeDragStop={ws.endDrag}
             nodesDraggable={editable && !connectionDrag} nodesConnectable={editable} elementsSelectable={!ws.busy} deleteKeyCode={null} minZoom={.15} maxZoom={1.7}
             proOptions={{ hideAttribution: true }} panOnScroll selectionOnDrag={false} zoomOnDoubleClick={false} aria-label="流程图画布">
-            <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#d7dbd4" />
+            <Background variant={BackgroundVariant.Dots} gap={24} size={.8} color="#cbd3df" />
             <ViewportPortal><svg className="connection-edit-overlay" width={1} height={1}>
               {editable && selectedEdgeId && scene.edges.filter(e => e.edge.id === selectedEdgeId && e.edge.source === selectedEdge?.source && e.edge.target === selectedEdge?.target).map(geometry => <g key={geometry.edge.id}>
                 {(['source', 'target'] as const).map(endpoint => <circle key={endpoint} className="connection-endpoint nodrag nopan" data-edge-id={geometry.edge.id} data-anchor-end={endpoint} cx={geometry[endpoint].x} cy={geometry[endpoint].y} r={7}
@@ -295,35 +412,37 @@ function Workspace() {
               {connectionDrag && (() => {
                 const tip = connectionDrag.candidate ? projectAnchor(scene.rects[connectionDrag.candidate.nodeId], connectionDrag.candidate.anchor) : connectionDrag.pointer;
                 const source = connectionDrag.endpoint === 'source' ? tip : connectionDrag.fixed, target = connectionDrag.endpoint === 'source' ? connectionDrag.fixed : tip;
-                return <g><defs><marker id="connection-preview-arrow" viewBox="0 0 10 10" refX={9} refY={5} markerWidth={6} markerHeight={6} orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#648160" /></marker></defs>
+                return <g><defs><marker id="connection-preview-arrow" viewBox="0 0 10 10" refX={9} refY={5} markerWidth={6} markerHeight={6} orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="var(--accent)" /></marker></defs>
                   <path className="connection-preview" d={`M${source.x},${source.y} L${target.x},${target.y}`} markerEnd="url(#connection-preview-arrow)" />
                   <circle className={`connection-drop-point ${connectionDrag.candidate ? 'valid' : ''}`} cx={tip.x} cy={tip.y} r={7} />
                 </g>;
               })()}
             </svg></ViewportPortal>
-            {!!displayGraph.nodes.length && <><Controls showInteractive={false} position="bottom-right" /><MiniMap position="bottom-left" pannable zoomable nodeColor={node => node.type === 'decision' ? '#e6cba1' : '#ccdcd1'} maskColor="rgba(248,247,243,.65)" /></>}
+            {!!displayGraph.nodes.length && <><MiniMap style={{ width: 112, height: 72 }} position="bottom-left" pannable zoomable nodeColor={node => node.type === 'decision' ? '#d7b66c' : '#a0b5db'} maskColor="rgba(246,248,252,.72)" /></>}
           </ReactFlow>
-          {!displayGraph.nodes.length && <div className="empty-canvas">
-            <div className="empty-diagram"><span><CircleDot size={16} /></span><i /><span><Square size={16} /></span><i /><span><Flag size={16} /></span></div>
-            <div className="eyebrow">THINK IN FLOWS</div>
-            <h2>{ws.task ? '从一个起点开始' : '先把流程想清楚。'}</h2>
-            <p>{ws.task ? '添加节点，连接关键步骤。\n复杂说明留在卡片里，让主线保持清楚。' : '把任务变成可以一起讨论、修改、确认的图。\n人确认方向，agent 再动手。'}</p>
-            {ws.task ? <button className="button primary" disabled={!editable} onClick={() => addNode('start')}><Plus size={16} />添加开始节点</button> : <button className="button primary" disabled={!ws.initialized || !hasToken()} onClick={() => setDialog('new')}><Plus size={16} />创建第一张流程图</button>}
-            <span className="empty-hint">也可以让 coding agent 用 skill 生成初稿，再在这里修改。</span>
-          </div>}
-          {!!displayGraph.nodes.length && <div className="canvas-legend"><span className="legend-dot program" />程序<span className="legend-dot llm" />LLM<span className="legend-dot human" />人工<span className="legend-divider" />{displayGraph.nodes.length} 个节点 · {displayGraph.edges.length} 条连线</div>}
+          {!displayGraph.nodes.length && <SpotlightCard className="empty-canvas">
+            <div className="empty-diagram" aria-hidden="true"><span><NODE_ICONS.start size={24} weight="bold" /></span><i /><span><NODE_ICONS.step size={24} weight="bold" /></span><i /><span><NODE_ICONS.end size={24} weight="bold" /></span></div>
+            <h2>{!ws.initialized ? '正在打开工作空间…' : ws.task ? '从第一个节点开始' : '先创建一份计划'}</h2>
+            <p>{ws.task ? '添加节点，连接步骤。' : '新建空白流程，或让 agent 生成初稿。'}</p>
+            {ws.task ? <GlareHover className="button primary" disabled={!editable} onClick={() => addNode('start')}><Plus size={16} />添加开始节点</GlareHover> : <GlareHover className="button primary" disabled={!ws.initialized || !hasToken()} onClick={() => setDialog('new')}><Plus size={16} />创建第一张流程图</GlareHover>}
+          </SpotlightCard>}
+          {!!displayGraph.nodes.length && <div className="canvas-legend"><span><strong>{displayGraph.nodes.length}</strong> 个节点</span><span className="legend-separator" aria-hidden="true" /><span><strong>{displayGraph.edges.length}</strong> 条连线</span></div>}
+          {!!displayGraph.nodes.length && <div className="canvas-zoom" role="group" aria-label="画布缩放"><button aria-label="放大画布" title="放大" onClick={() => zoomCanvas('in')} disabled={zoom >= 1.7}><Plus size={16} /></button><button className="zoom-value" aria-label={`当前缩放 ${Math.round(zoom * 100)}%，点击以 100% 阅读`} onClick={readCanvas}>{Math.round(zoom * 100)}%</button><button aria-label="缩小画布" title="缩小" onClick={() => zoomCanvas('out')} disabled={zoom <= .15}><Minus size={16} /></button><button aria-label="查看流程全貌" title="查看全貌" onClick={() => fitCanvas(250)}><Maximize size={15} /></button></div>}
+          {!!ws.task && <NodeDock disabled={!editable} onAdd={addNode} />}
           {!!ws.busy && <div className="busy-overlay" role="status"><span><Loader2 className="spin" size={18} />{ws.busy}</span></div>}
         </div>
 
-        {panelOpen && <aside className="inspector">
-          <div className="inspector-tabs"><button className={panel === 'details' ? 'active' : ''} onClick={() => setPanel('details')}><Layers2 size={14} />{selectedNodeId ? '节点详情' : selectedEdge ? '连线详情' : '流程说明'}</button><button className={panel === 'history' ? 'active' : ''} onClick={() => setPanel('history')}><History size={14} />版本历史</button></div>
-          <div className="inspector-content">
+        {panelOpen && !!ws.task && <motion.aside initial={reducedMotion ? false : { x: 10, opacity: 0.85 }} animate={{ x: 0, opacity: 1 }} transition={reducedMotion ? { duration: 0 } : UI_TRANSITION} ref={inspectorRef} id="workspace-inspector" className="inspector" tabIndex={-1} aria-label="流程详情面板">
+          <div className="inspector-tabs" aria-label="详情视图"><button aria-pressed={panel === 'details'} className={panel === 'details' ? 'active' : ''} onClick={() => setPanel('details')}><FileText size={18} />{selectedNodeId ? '节点详情' : selectedEdge ? '连线详情' : '流程说明'}{panel === 'details' && <SelectionIndicator id="inspector-tab" className="tab-indicator" />}</button><button aria-pressed={panel === 'history'} className={panel === 'history' ? 'active' : ''} onClick={() => setPanel('history')}><History size={14} />版本历史{panel === 'history' && <SelectionIndicator id="inspector-tab" className="tab-indicator" />}</button><button className="icon-button inspector-close" aria-label="关闭详情面板" onClick={() => setPanelOpen(false)}><X size={15} /></button></div>
+          <div ref={inspectorContent} className="inspector-content">
+            <ContentTransition identity={[ws.task?.id, panel, selectedNodeId, selectedEdgeId, historical?.id].join(':')}>
             {panel === 'history' ? <>
-              <div className="section-heading"><h2>每一次理解，都有迹可循</h2><p>自动保存草稿；在反馈、修订和确认时留下版本。旧版本不会被覆盖。</p></div>
+              <div className="section-heading"><h2>版本历史</h2><p>草稿自动保存。存档、反馈与确认时生成快照，历史版本不会被覆盖。</p></div>
               <button className="button secondary full-width" onClick={() => void ws.perform('checkpoint')} disabled={!editable}><Save size={15} />存档当前版本</button>
               <div className="history-list">{[...(ws.task?.versions || [])].reverse().map(version => <button key={version.id} className={`history-item ${historical?.id === version.id ? 'active' : ''}`} onClick={() => void selectVersion(version.id)} disabled={!!ws.busy || versionLoading}>
-                <span className="history-pin">{version.kind === 'approve' || version.kind === 'approved' ? <Check size={12} /> : <span />}</span><span><strong>{VERSION_LABELS[version.kind] || version.kind}</strong><small>{version.id} · {time(version.createdAt)}</small>{!!version.feedback && <em>{version.feedback}</em>}</span><ChevronRight size={13} />
+                <span className="history-pin">{version.kind === 'approve' || version.kind === 'approved' ? <Check size={12} /> : <span />}</span><span><strong>{VERSION_LABELS[version.kind] || version.kind}</strong><small><time dateTime={version.createdAt}>{time(version.createdAt)}</time><code title={version.id}>{version.id}</code></small>{!!version.feedback && <em>{version.feedback}</em>}</span><ChevronRight size={13} />
               </button>)}</div>
+              {!ws.task?.versions.length && <div className="history-empty"><History size={24} /><h3>还没有历史版本</h3><p>存档当前流程，保留一个可以随时回看的版本。</p></div>}
               {historical && <section className="history-actions"><h3>这个版本的文件</h3><div className="artifact-buttons"><button onClick={() => void downloadVersion('diagram.json')}><FileJson size={15} />JSON</button><button onClick={() => void downloadVersion('diagram.md')}><FileText size={15} />文字</button><button disabled={!historical.hasPng} onClick={() => void downloadVersion('diagram.png')}><Image size={15} />PNG</button></div>{!historical.hasPng && <p className="field-hint">此版本尚未经过浏览器提交，因此没有 PNG。</p>}<button className="button secondary full-width" disabled={!!ws.busy} onClick={() => void restoreVersion(historical.id)}><RotateCcw size={14} />恢复为新草稿</button><p className="field-hint">恢复不会修改历史，也不会自动暂停已开始的实现。</p></section>}
             </> : selectedNodeId && (selectedNode || groupsOf(displayGraph).some(g => g.id === selectedNodeId)) ? <NodeInspector
               key={`${ws.task?.id}:${historical?.id}:${selectedNodeId}:${JSON.stringify(detailScope)}`} graph={displayGraph} selectedId={selectedNodeId}
@@ -340,40 +459,45 @@ function Workspace() {
               <div className="inspector-callout"><GitBranch size={17} /><p>条件判断的每条出口都需要标签，避免人和 agent 对同一条线理解不同。</p></div>
               <div className="node-identity">连线 ID <code>{selectedEdge.id}</code></div>
             </> : <>
-              <div className="section-heading"><span className="section-kicker">THE BIG PICTURE</span><h2>主线清楚，细节有处安放。</h2><p>这里约定目标和边界。点击节点，补充它的输入、输出与行为。</p></div>
-              <label className="field-label" htmlFor="graph-title">流程名称</label><input id="graph-title" value={displayGraph.title} maxLength={200} disabled={!editable} onChange={event => ws.edit({ ...ws.graph, title: event.target.value })} />
-              <label className="field-label" htmlFor="graph-description">这次要解决什么</label><textarea id="graph-description" rows={3} value={displayGraph.description} disabled={!editable} placeholder="一句话说明任务目标与范围" onChange={event => ws.edit({ ...ws.graph, description: event.target.value })} />
-              <label className="field-label" htmlFor="graph-constraints">约束与验收条件</label><textarea id="graph-constraints" rows={7} value={displayGraph.constraints} disabled={!editable} placeholder={'例如：\n- 最多重试一次\n- 失败时保留用户输入\n- 不修改已有对外接口'} onChange={event => ws.edit({ ...ws.graph, constraints: event.target.value })} />
-              {!!displayGraph.constraints && !editable && <div className="notes-preview"><Markdown text={displayGraph.constraints} /></div>}
-              <div className="inspector-callout"><Sparkles size={17} /><p>默认争取 5–9 个主节点。必要分支不能省，细节可以放进节点说明。</p></div>
+              <GraphInspector key={`${ws.task?.id}:${historical?.id || 'current'}`} graph={displayGraph} editable={editable} onEdit={ws.edit} />
               {!!warnings.length && <div className="quality-warnings">{warnings.map(warning => <p key={warning}><AlertCircle size={14} />{warning}</p>)}</div>}
-              <div className="artifact-summary"><span><FileJson size={14} />结构化 JSON</span><span><FileText size={14} />文字视图</span><span><Image size={14} />完整 PNG</span><p>同一版本，自动生成。不需要维护三份内容。</p></div>
             </>}
+            </ContentTransition>
           </div>
-        </aside>}
+        </motion.aside>}
       </div>
 
-      <footer className="review-bar">
-        <div className="review-status">{historical ? <><History size={17} /><span>历史快照不可修改<small>可以恢复成新草稿，继续讨论</small></span></> : ws.task?.status === 'approved' ? <><ShieldCheck size={20} /><span>已确认，可以开始实现<small>实现必须依据批准版本 {ws.task.approvedVersion}</small></span></> : ws.task?.status === 'awaiting_agent' ? <><Clock3 size={19} /><span>等待 agent 根据反馈修订<small>页面暂时只读；agent 已停止等待时，请回终端让它继续</small></span></> : ws.task?.status === 'cancelled' ? <><Pause size={18} /><span>规划已暂停，草稿仍保留<small>暂停不授权 agent 开始实现</small></span></> : <><LockKeyhole size={17} /><span>确认之前，agent 不开始编码<small>先对齐核心流程，再补实现细节</small></span></>}</div>
+      {!!ws.task && <footer className="review-bar">
+        <div className="mobile-review-meta"><span role="status" className={`mobile-save-status ${!ws.online ? 'offline' : ''}`}>{!ws.online ? <><AlertCircle size={12} />连接中断</> : ws.saving ? <><Loader2 size={12} className="spin" />保存中…</> : ws.dirty ? <><Clock3 size={12} />未保存</> : <><Check size={12} />{ws.task ? '已保存' : '本地工作区'}</>}</span><span>{historical ? '历史快照 · 只读' : STATUS_LABELS[ws.task.status]}</span></div>
+        {(historical || ws.task.status !== 'draft') && <div className="review-status">{historical ? <><History size={17} /><span>历史快照 · 只读</span></> : ws.task.status === 'approved' ? <><ShieldCheck size={18} /><span>已确认 · {ws.task.approvedVersion}</span></> : ws.task.status === 'awaiting_agent' ? <><Clock3 size={18} /><span title="页面暂时只读；如 agent 已停止等待，请回终端让它继续。">等待 agent 修订</span></> : <><Pause size={18} /><span>已暂停</span></>}</div>}
         <div className="review-actions">
           {historical ? <button className="button secondary" disabled={!!ws.busy} onClick={() => void restoreVersion(historical.id)}><RotateCcw size={15} />恢复为新草稿</button> : ws.task?.status === 'approved' ? <button className="button secondary" disabled={!!ws.busy} onClick={() => ws.task?.approvedVersion && void restoreVersion(ws.task.approvedVersion)}><Plus size={15} />创建修订</button> : ws.task?.status === 'awaiting_agent' ? <button className="button secondary" disabled={!!ws.busy} onClick={() => void ws.perform('resume')}><RotateCcw size={15} />取消等待，继续编辑</button> : ws.task?.status === 'cancelled' ? <button className="button primary" disabled={!!ws.busy} onClick={() => void ws.perform('resume')}><ArrowRight size={15} />继续编辑</button> : <>
             <button className="icon-button" aria-label="暂停本次规划" title="暂停规划，保留草稿" disabled={!editable} onClick={() => setDialog('cancel')}><Pause size={16} /></button>
             <button className="button subtle checkpoint-button" disabled={!editable} onClick={() => void ws.perform('checkpoint')}><Save size={15} />存档</button>
             <button className="button secondary" disabled={!editable} onClick={() => { setFeedback(''); setDialog('feedback'); }}><MessageSquare size={15} />请 agent 修改</button>
-            <button className="button primary" disabled={!editable || !displayGraph.nodes.length} onClick={() => setDialog('approve')}><Check size={16} />确认流程<ArrowRight size={14} /></button>
+            <GlareHover className="button primary" disabled={!editable || !displayGraph.nodes.length} onClick={() => setDialog('approve')}><Check size={16} />确认流程<ArrowRight size={14} /></GlareHover>
           </>}
         </div>
-      </footer>
+      </footer>}
     </main>
 
-    {dialog && <div className="modal-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !ws.busy) setDialog(null); }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="dialog-title"><button className="icon-button modal-close" aria-label="关闭对话框" onClick={() => setDialog(null)} disabled={!!ws.busy}><X size={18} /></button>
-      {dialog === 'new' ? <><span className="modal-icon"><Plus size={22} /></span><div className="eyebrow">A CLEAR BEGINNING</div><h2 id="dialog-title">创建一张空白画板</h2><p>先给这次任务一个名字，然后手动搭建核心流程。</p><label className="field-label" htmlFor="new-title">任务名称</label><input id="new-title" autoFocus value={newTitle} maxLength={200} placeholder="例如：消息处理与失败重试" onChange={event => setNewTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newTitle.trim() && !ws.busy) void ws.createTask(newTitle).then(ok => { if (ok) setDialog(null); }); }} /><div className="modal-tip"><Sparkles size={16} /><span>想让 agent 生成？在 coding agent 中调用 diagram-plan skill，并选择“生成初稿”。画板不会单独连接模型。</span></div><button className="button primary full-width" disabled={!newTitle.trim() || !!ws.busy} onClick={() => void ws.createTask(newTitle).then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}创建并打开</button></> : dialog === 'feedback' ? <><span className="modal-icon"><MessageSquare size={22} /></span><div className="eyebrow">ONE MORE ITERATION</div><h2 id="dialog-title">告诉 agent 要改哪里</h2><p>当前图、完整说明和 PNG 会一并交给 agent。提交后暂时只读，避免双方同时修改。</p><label className="field-label" htmlFor="feedback">修改要求</label><textarea id="feedback" autoFocus rows={6} value={feedback} placeholder="例如：在校验失败后增加一次重试；保持现在的主线与布局。" onChange={event => setFeedback(event.target.value)} disabled={!!ws.busy} /><button className="button primary full-width" disabled={!feedback.trim() || !!ws.busy} onClick={() => void ws.perform('submit', { feedback }).then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}提交图与反馈</button></> : dialog === 'approve' ? <><span className="modal-icon"><ShieldCheck size={24} /></span><div className="eyebrow">SHARED UNDERSTANDING</div><h2 id="dialog-title">按这张图，开始实现。</h2><p>确认将冻结当前版本，生成一致的 JSON、Markdown 与完整 PNG。之后改图，需要创建修订并重新确认。</p><div className="approval-summary"><strong>{displayGraph.title}</strong><span>{displayGraph.nodes.length} 个节点 · {displayGraph.edges.length} 条连线 · {displayGraph.nodes.filter(n => n.data.notes).length} 张说明卡片</span></div>{!!issues.length && <div className="approval-issues">{issues.map((issue, i) => <p key={i}><AlertCircle size={14} />{issue}</p>)}</div>}<p className="field-hint">这是对 agent 的实施授权；不是宿主工具权限级别的强制拦截。</p><button className="button primary full-width" disabled={!!issues.length || !!ws.busy} onClick={() => void ws.perform('approve').then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <Check size={16} />}确认并开始实现</button></> : <><span className="modal-icon"><Pause size={22} /></span><h2 id="dialog-title">暂停这次规划？</h2><p>当前草稿和历史都会保留。agent 会收到取消状态，不应开始实现。你可以随时回来继续编辑。</p><button className="button primary full-width" disabled={!!ws.busy} onClick={() => void ws.perform('cancel').then(ok => { if (ok) setDialog(null); })}>保留草稿并暂停</button></>}
+    {dialog && <Dialog onClose={() => setDialog(null)} busy={!!ws.busy} labelledBy="dialog-title" actions={
+      dialog === 'new' ? <button className="button primary full-width" disabled={!newTitle.trim() || !!ws.busy} onClick={() => void ws.createTask(newTitle).then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}创建并打开</button>
+      : dialog === 'feedback' ? <button className="button primary full-width" disabled={!feedback.trim() || !!ws.busy} onClick={() => void ws.perform('submit', { feedback }).then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}提交图与反馈</button>
+      : dialog === 'approve' ? <button className="button primary full-width" disabled={!!issues.length || !!ws.busy} onClick={() => void ws.perform('approve').then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <Check size={16} />}确认并开始实现</button>
+      : dialog === 'cancel' ? <button className="button primary full-width" disabled={!!ws.busy} onClick={() => void ws.perform('cancel').then(ok => { if (ok) setDialog(null); })}>保留草稿并暂停</button> : undefined
+    }>
+      {dialog === 'shortcuts' ? <><h2 id="dialog-title">快捷键</h2><dl className="shortcut-list"><div><dt>搜索流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>K</kbd></dd></div><div><dt>撤销</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Z</kbd></dd></div><div><dt>重做</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Shift</kbd><kbd>Z</kbd></dd></div><div><dt>存档当前版本</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>S</kbd></dd></div><div><dt>删除选中节点或连线</dt><dd><kbd>Delete</kbd></dd></div><div><dt>退出选择 / 关闭弹窗</dt><dd><kbd>Esc</kbd></dd></div></dl><div className="modal-tip"><MousePointer2 size={17} /><span>拖动卡片边缘即可创建连线；选中连线后拖动端点可重新连接。滚动画布平移，双指缩放调整视野。</span></div></> : dialog === 'new' ? <><span className="modal-icon"><Plus size={22} /></span><h2 id="dialog-title">新建流程</h2><label className="field-label" htmlFor="new-title">任务名称</label><input id="new-title" autoFocus value={newTitle} maxLength={200} placeholder="例如：消息处理与失败重试" onChange={event => setNewTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newTitle.trim() && !ws.busy) void ws.createTask(newTitle).then(ok => { if (ok) setDialog(null); }); }} /><div className="modal-tip"><Sparkles size={16} /><span>生成初稿：在 coding agent 中调用 diagram-plan skill。</span></div></> : dialog === 'feedback' ? <><span className="modal-icon"><MessageSquare size={22} /></span><h2 id="dialog-title">告诉 agent 要改哪里</h2><p>当前图、完整说明和 PNG 会一并交给 agent。提交后暂时只读，避免双方同时修改。</p><label className="field-label" htmlFor="feedback">修改要求</label><textarea id="feedback" autoFocus rows={6} value={feedback} placeholder="例如：在校验失败后增加一次重试；保持现在的主线与布局。" onChange={event => setFeedback(event.target.value)} disabled={!!ws.busy} /></> : dialog === 'approve' ? <><span className="modal-icon"><ShieldCheck size={24} /></span><h2 id="dialog-title">确认并开始实现？</h2><p>确认后将授权 agent 按当前流程实现，并冻结此版本。后续修改需创建修订。</p><div className="approval-summary"><strong>{displayGraph.title}</strong><span>{displayGraph.nodes.length} 个节点 · {displayGraph.edges.length} 条连线 · {displayGraph.nodes.filter(n => n.data.notes).length} 张说明卡片</span></div>{!!issues.length && <div className="approval-issues">{issues.map((issue, i) => <p key={i}><AlertCircle size={14} />{issue}</p>)}</div>}<p className="field-hint">这是对 agent 的实施授权；不是宿主工具权限级别的强制拦截。</p></> : <><span className="modal-icon"><Pause size={22} /></span><h2 id="dialog-title">暂停这次规划？</h2><p>当前草稿和历史都会保留。agent 会收到取消状态，不应开始实现。你可以随时回来继续编辑。</p></>}
       {!!ws.busy && <p className="modal-progress" role="status">{ws.busy}</p>}
       {!!ws.error && <p className="modal-error" role="alert">{ws.error}</p>}
-    </section></div>}
+    </Dialog>}
   </div>;
 }
 
 export default function App() {
-  return <ReactFlowProvider><Workspace /></ReactFlowProvider>;
+  const scope = useId();
+  const reduced = useReducedMotion();
+  return <IconContext.Provider value={UI_ICON_STYLE}><MotionConfig reducedMotion={reduced ? 'always' : 'never'} transition={UI_TRANSITION}><LayoutGroup id={scope}>
+    <ReactFlowProvider><Workspace /></ReactFlowProvider>
+  </LayoutGroup></MotionConfig></IconContext.Provider>;
 }
