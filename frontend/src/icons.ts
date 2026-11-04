@@ -5,8 +5,8 @@ import type { NodeKind, Executor } from './types';
 export const NODE_ICONS = { start: Play, step: List, decision: GitFork, end: CheckCircle } satisfies Record<NodeKind, typeof Play>;
 export const EXECUTOR_ICONS = { program: Code, llm: Cpu, human: User } satisfies Record<Executor, typeof Code>;
 export const GroupIcon = StackSimple;
-// One clear linear weight. Optical sizes are assigned by control/metadata roles.
-export const UI_ICON_STYLE = { weight: 'bold' as const, size: 20 };
+// Regular weight sits with 14px UI text. Graph cards pass bold because they scale down with zoom.
+export const UI_ICON_STYLE = { weight: 'regular' as const, size: 20 };
 export { IconContext } from '@phosphor-icons/react';
 
 export {

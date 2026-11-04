@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Graph, GraphGroup } from './types';
 import { buildView, moveItem, NODE_HEIGHT, NODE_WIDTH } from './views';
-import { createScene } from './geometry';
+import { createRootScene, createScene } from './geometry';
 import { projectAnchor } from './anchors';
+import sample from '../../examples/sample-flow.json';
 
 function tangentGraph(): Graph {
   const height = 220 * Math.sqrt(3) / 2;
@@ -91,5 +92,17 @@ describe('circle and outline geometry', () => {
     const reversed = createScene(buildView({ ...graph, groups: [...graph.groups!].reverse() }));
     expect(reversed.edges).toEqual(scene.edges);
     expect(JSON.stringify(graph)).toBe(before);
+  });
+});
+
+describe('detour endpoints', () => {
+  it('enters a card from the side it arrives on instead of running along its edge', () => {
+    const scene = createRootScene(sample as unknown as Graph, true);
+    const geometry = scene.edges.find(item => item.edge.id === 'reject-to-finish')!;
+    const card = scene.rects['finish-attempt'];
+    expect(geometry.target).toEqual({ x: card.x + card.width, y: card.y + card.height / 2 });
+    const beforeLast = geometry.points[geometry.points.length - 2];
+    expect(beforeLast.y).toBe(geometry.target.y);
+    expect(beforeLast.x).toBeGreaterThan(geometry.target.x);
   });
 });

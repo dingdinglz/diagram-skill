@@ -58,7 +58,7 @@ function DockItem({ type, hint, pointer, enabled, disabled, onAdd }: {
     onFocus={event => focused.set(enabled && event.currentTarget.matches(':focus-visible') ? 1 : 0)}
     onBlur={() => focused.set(0)}>
     <motion.span className="dock-icon" aria-hidden="true" style={enabled ? { scale, y } : { scale: 1, y: 0 }}>
-      <Icon size={22} weight="bold" />
+      <Icon size={22} />
     </motion.span>
     <span>{type === 'step' ? '步骤' : type === 'decision' ? '判断' : label}</span>
   </button>;

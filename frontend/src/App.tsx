@@ -552,7 +552,6 @@ function Workspace() {
           <Aurora enabled={ambientEnabled} paused={!!dialog || !!ws.busy || !!connectionDrag || (narrow && (panelOpen || sidebarOpen))} />
           {!displayGraph.nodes.length && ambientControl}
           {!!ws.task && !!displayGraph.nodes.length && <div ref={toolbarRef} className="canvas-toolbar" role="toolbar" aria-label="画布操作">
-            <span className="canvas-view-label">{levelPath.length ? '本层' : '画布'}</span><span className="toolbar-divider" />
             <button className="icon-button" title="撤销 ⌘/Ctrl Z" aria-label="撤销" onClick={ws.undo} disabled={!editable || !ws.canUndo}><Undo2 size={17} /></button>
             <button className="icon-button" title="重做 ⌘/Ctrl Shift Z" aria-label="重做" onClick={ws.redo} disabled={!editable || !ws.canRedo}><Redo2 size={17} /></button>
             <span className="toolbar-divider" />
@@ -607,7 +606,7 @@ function Workspace() {
                 </g>;
               })()}
             </svg></ViewportPortal>
-            {!!displayGraph.nodes.length && <><MiniMap style={{ width: 112, height: 72 }} position="bottom-left" pannable zoomable nodeColor={node => node.type === 'decision' ? '#d7b66c' : '#a0b5db'} maskColor="rgba(246,248,252,.72)" /></>}
+            {!!displayGraph.nodes.length && <><MiniMap style={{ width: 112, height: 72 }} position="bottom-left" pannable zoomable nodeBorderRadius={14} nodeColor={node => node.type === 'decision' ? '#e2c88f' : '#b9c7df'} maskColor="rgba(240,243,248,.78)" maskStrokeColor="#4263df33" maskStrokeWidth={1} /></>}
           </ReactFlow>
           {!displayGraph.nodes.length && <SpotlightCard className="empty-canvas">
             <div className="empty-diagram" aria-hidden="true"><span><NODE_ICONS.start size={24} weight="bold" /></span><i /><span><NODE_ICONS.step size={24} weight="bold" /></span><i /><span><NODE_ICONS.end size={24} weight="bold" /></span></div>
@@ -693,7 +692,7 @@ function Workspace() {
             <button className="icon-button" aria-label="暂停本次规划" title="暂停规划，保留草稿" disabled={!editable} onClick={() => setDialog('cancel')}><Pause size={16} /></button>
             <button className="button subtle checkpoint-button" disabled={!editable} onClick={() => void ws.perform('checkpoint')}><Save size={15} />存档</button>
             <button className="button secondary" disabled={!editable} onClick={() => { setFeedback(''); setDialog('feedback'); }}><MessageSquare size={15} />请 agent 修改</button>
-            <GlareHover className="button primary" disabled={!editable || !displayGraph.nodes.length} onClick={() => setDialog('approve')}><Check size={16} />确认流程<ArrowRight size={14} /></GlareHover>
+            <GlareHover className="button primary" disabled={!editable || !displayGraph.nodes.length} onClick={() => setDialog('approve')}><Check size={16} />确认流程</GlareHover>
           </>}
         </div>
       </footer>}

@@ -108,7 +108,7 @@ void main() {
     float warp = snoise(vec2(X * 0.45 + pace * 0.02 + seed, pace * 0.05 + seed));
     float wave = snoise(vec2(X * 0.75 + warp * 0.35 - pace * 0.03 + seed, pace * 0.07 - seed)) * 0.72
       + snoise(vec2(X * 1.6 + warp * 0.5 + pace * 0.04 - seed, pace * 0.1 + seed * 0.5)) * 0.28;
-    float hem = 0.43 + layer * 0.07 + wave * 0.15 * 0.7;
+    float hem = 0.36 + layer * 0.07 + wave * 0.15 * 0.7;
     float soft = (0.04 + 0.7 * 0.16) * (1.0 + layer * 0.9);
     float rise = hem - y;
     float low = -soft - 0.6 * 0.14;
@@ -120,11 +120,11 @@ void main() {
     glow = 1.0 - (1.0 - glow) * (1.0 - tint * alpha);
     cover = 1.0 - (1.0 - cover) * (1.0 - alpha);
   }
-  glow *= 0.4;
-  cover *= 0.4;
+  glow *= 0.26;
+  cover *= 0.26;
   float dither = (hash(frag) - 0.5) / 255.0;
   vec3 tint = cover > 0.0001 ? glow / cover : vec3(0.0);
-  cover *= smootherstep(0.0, 0.25, cover);
+  cover *= smootherstep(0.0, 0.26, cover);
   float alpha = cover * 0.7;
   outColor = vec4(tint * alpha + dither, clamp(alpha + dither, 0.0, 1.0));
 }

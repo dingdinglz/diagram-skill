@@ -75,6 +75,26 @@ function roundedPath(points: Point[]): string {
   }
   return path + ` L${point(points[points.length-1])}`;
 }
+// An orthogonal detour must not run along a card's own edge. Keep its corridor and
+// only turn that end into the side it arrives from, so obstacle clearance is preserved.
+function squareStart(points: Point[], r: Rect, obstacles: Rect[]): Point[] {
+  const [end, next, after] = points;
+  const near = (p: number, q: number) => Math.abs(p - q) < 1;
+  let moved: Point, corner: Point;
+  if (near(end.y, next.y) && (near(end.y, r.y) || near(end.y, r.y + r.height)) && (next.x < r.x || next.x > r.x + r.width)) {
+    moved = { x: next.x < r.x ? r.x : r.x + r.width, y: r.y + r.height / 2 };
+    corner = { x: next.x, y: moved.y };
+  } else if (near(end.x, next.x) && (near(end.x, r.x) || near(end.x, r.x + r.width)) && (next.y < r.y || next.y > r.y + r.height)) {
+    moved = { x: r.x + r.width / 2, y: next.y < r.y ? r.y : r.y + r.height };
+    corner = { x: moved.x, y: next.y };
+  } else return points;
+  const sameAxis = !!after && ((corner.x === next.x && next.x === after.x) || (corner.y === next.y && next.y === after.y));
+  // The new elbow must continue the detour forward, not double back over it.
+  if (sameAxis && (next.x - corner.x) * (after.x - next.x) + (next.y - corner.y) * (after.y - next.y) < 0) return points;
+  if (!clearSegment(moved, corner, obstacles) || !clearSegment(corner, next, obstacles)) return points;
+  return [moved, corner, ...(sameAxis ? [] : [next]), ...points.slice(2)];
+}
+
 function route(a: Point, b: Point, obstacles: Rect[]): Point[] {
   if (clearSegment(a,b,obstacles)) return [a,b];
   // Orthogonal visibility grid, searched lazily. Turns carry a cost so a detour
@@ -177,7 +197,14 @@ export function createScene(view: GraphView, measurements: Record<string,{width:
       if(sourceAnchor||targetAnchor) {
         const start=offset(source,normal(a,source),28),end=offset(target,normal(b,target),28);
         points=[source,...route(start,end,[...obstacles,a,b]),target];
-      } else points=route(source,target,obstacles);
+      } else {
+        points=route(source,target,obstacles);
+        if(points.length>2) {
+          points=squareStart(points,a,obstacles);
+          points=squareStart([...points].reverse(),b,obstacles).reverse();
+          source=points[0]; target=points[points.length-1];
+        }
+      }
       path=roundedPath(points);
       // Label the longest segment; ties use the earlier segment deterministically.
       let best=0;for(let i=1;i<points.length;i++)if(distance(points[i-1],points[i])>best){best=distance(points[i-1],points[i]);label={x:(points[i-1].x+points[i].x)/2,y:(points[i-1].y+points[i].y)/2};}

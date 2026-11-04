@@ -4,7 +4,7 @@
 .canvas-area > .react-flow { z-index: 1; background: transparent; }
 .canvas-area > .canvas-legend { z-index: 2; }
 .ambient-toggle { margin-left: auto; }
-.ambient-toggle[aria-pressed=true] { color: var(--accent); background: var(--accent-soft); }
+.ambient-toggle[aria-pressed=true] { color: var(--accent); }
 .ambient-toggle-empty { position: absolute; top: 18px; right: 18px; z-index: 5; background: #ffffffc7; border: 1px solid var(--line); }
 
 .spotlight-card { position: relative; isolation: isolate; }

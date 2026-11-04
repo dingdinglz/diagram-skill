@@ -46,7 +46,7 @@ export function NodeInspector({ graph, selectedId, initialScope, levelId, autoEd
       <h2 ref={headingRef} tabIndex={-1}>{view!.title}</h2>{view!.summary&&<p className="reader-summary">{view!.summary}</p>}
       <DetailDiagram key={JSON.stringify(current.scope)} graph={graph} scope={current.scope} onNode={visit}/>
     </>:node?<>
-      <div className="selection-heading"><span className="kind-badge">{KIND_LABELS[node.type]}</span><span className="reader-executor">{EXECUTOR_LABELS[node.data.executor]}</span></div>
+      <div className="selection-heading"><span className={`kind-badge kind-${node.type}`}>{KIND_LABELS[node.type]}</span><span className="reader-executor">{EXECUTOR_LABELS[node.data.executor]}</span></div>
       {!editing || !editable?<>
         <h2 ref={headingRef} tabIndex={-1}>{node.data.label}</h2>{node.data.summary&&<p className="reader-summary">{node.data.summary}</p>}
         <div className="reader-notes"><Markdown text={node.data.notes||'暂无补充说明。'}/></div>
