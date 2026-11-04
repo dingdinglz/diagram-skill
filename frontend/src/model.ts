@@ -32,7 +32,7 @@ function validLoop(graph: Graph, group: GraphGroup): boolean {
     && sets.every(items => [...items].some(member => paths.get(id)!.has(member) && paths.get(member)?.has(id))));
 }
 
-function repairGroups(graph: Graph, previous: GraphGroup[] = graph.groups || []): Graph {
+export function repairGroups(graph: Graph, previous: GraphGroup[] = graph.groups || []): Graph {
   if (!graph.groups) return graph;
   const retained = graph.groups.filter(g => g.nodeIds.length);
   const groups = retained.map(g => {
@@ -116,6 +116,7 @@ export function approvalIssues(graph: Graph): string[] {
   const issues: string[] = [];
   if (!graph.title.trim()) issues.push('给流程起一个名字。');
   if (!graph.nodes.length) issues.push('至少添加一个流程节点。');
+  if (graph.groups?.some(g => !g.label.trim())) issues.push('有子流程还没有填写名称。');
   for (const n of graph.nodes) {
     if (!n.data.label.trim()) issues.push('有节点还没有填写标题。');
     if (n.type === 'decision') {

@@ -254,7 +254,7 @@ def main():
             # Overview cards open the same full-sized reader; tiny action links
             # are intentionally reserved for reading scale.
             browser('click', '[data-id=work]')
-            wait_for('!!document.querySelector(".detail-diagram")')
+            wait_for('!!document.querySelector(".group-panel[data-group=work]")')
             assert evaluate('document.querySelectorAll(".reader-branches button").length') == 2
             click('100% 阅读')
             wait_for('document.querySelector(".zoom-value")?.textContent === "100%"')
@@ -272,8 +272,12 @@ def main():
             assert canvas_geometry() == loop_geometry
             browser('screenshot', str(ARTIFACTS / 'branch-details.png'))
             browser('click', '[data-id=work] .node-subflow-button')
-            wait_for('!!document.querySelector("[data-view-id=work]")')
-            assert canvas_geometry() == loop_geometry
+            wait_for('!!document.querySelector(".level-bar") && !!document.querySelector("[data-id=generate]")')
+            browser('wait', '300')
+            click('返回上一层')
+            wait_for('!document.querySelector(".level-bar") && !!document.querySelector("[data-id=work]")')
+            browser('wait', '300')
+            assert canvas_geometry() == loop_geometry, 'Returning from a level must restore its viewport'
             browser('wait', '1000')
             assert cli('show', '--task', loop_id) == loop_state
             click('显示分支')

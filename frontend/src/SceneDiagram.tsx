@@ -18,9 +18,9 @@ export function SceneDiagram({ scene, onNode }: { scene: Scene; onNode?: (node: 
           {!!e.edge.label && <foreignObject x={e.label.x-90} y={e.label.y-23} width={180} height={70}><div className="scene-edge-label" title={e.edge.label}>{e.edge.label.length > 36 ? e.edge.label.slice(0,32)+'…' : e.edge.label}</div></foreignObject>}
         </g>)}
       </svg>
-      {view.nodes.map(n => <div key={n.id} className={`flow-node scene-node kind-${n.type} ${n.reference?'reference-node':''}`} data-scene-node={n.id} style={{ left:rects[n.id].x,top:rects[n.id].y }}
+      {view.nodes.map(n => <div key={n.id} className={`flow-node scene-node kind-${n.type} ${n.reference?'reference-node':''} ${n.groupId?'is-group':''}`} data-scene-node={n.id} style={{ left:rects[n.id].x,top:rects[n.id].y }}
         role={onNode?'button':undefined} tabIndex={onNode?0:undefined} onClick={()=>onNode?.(n)} onKeyDown={e=>{if(e.key==='Enter')onNode?.(n);}}>
-        <NodeBody node={n} groupId={n.groupId} branchCount={view.branches[n.id]?.length || 0} exceptionsOnly={view.branches[n.id]?.every(b=>b.exception)} onBranches={onNode?()=>onNode(n):undefined} onGroup={onNode?()=>onNode(n):undefined} />
+        <NodeBody node={n} groupId={n.groupId} memberCount={view.groups?.find(g=>g.id===n.groupId)?.nodeIds.length} branchCount={view.branches[n.id]?.length || 0} exceptionsOnly={view.branches[n.id]?.every(b=>b.exception)} onBranches={onNode?()=>onNode(n):undefined} onGroup={onNode?()=>onNode(n):undefined} />
       </div>)}
     </div>
   </div>;

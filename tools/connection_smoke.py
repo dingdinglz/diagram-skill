@@ -153,7 +153,7 @@ def main():
             geometry = smoke.canvas_geometry()
             state = cli('show', '--task', task_id)
             smoke.browser('click', '[data-id="loop-area:retry-loop"] .loop-caption')
-            smoke.wait_for('!!document.querySelector("[data-view-id=retry-loop]")')
+            smoke.wait_for('!!document.querySelector(".group-panel[data-group=retry-loop]")')
             smoke.browser('wait', '800')
             assert cli('show', '--task', task_id) == state
             assert smoke.canvas_geometry() == geometry, 'Reading a nested loop must preserve the main drawing'

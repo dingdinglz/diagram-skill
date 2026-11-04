@@ -268,6 +268,10 @@ Controls are gently rounded, not pill-shaped by default: button (7px), field/too
 - **Canvas controls:** Main/branch scope buttons use a soft segmented track with a gliding paper thumb and blue pressed text. The node dock separates creation from view controls. Reading and fitting are separate commands.
 - **Dialogs:** Labeled modal surface, dimmed backdrop, scrollable `.modal-content` (34px padding; 30px 24px on mobile) and a separate, non-scrolling `.modal-actions` footer. The close control and primary action stay visible at short heights. Preserve initial/return focus. Tab cycles current enabled controls; shortcuts stop at the dialog. Busy state blocks close, Escape, and backdrop dismissal. Sidecar snippets illustrate appearance only; use `Dialog.tsx` for this behavior.
 
+### Nested levels
+
+`level-bar` is a floating `paper` breadcrumb with `shadow-float`, placed under the canvas toolbar. Group cards use `.is-group`: the 248×116 card plus two inset lower layers (`node-surface`, then `soft-surface`) that take `accent` when selected. `.reference-node` is a translucent dashed card with no filled icon tile and a blue jump label. `.is-drop-target` uses `accent-soft` with a 2px `accent` outline. `selection-bar` takes the dock's exact position and surface. The inspector outline uses 32px rows, 16px node icons and a 1px `line` guide per depth.
+
 ## Do's and Don'ts
 
 ### Do:

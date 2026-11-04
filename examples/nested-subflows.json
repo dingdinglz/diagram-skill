@@ -1,0 +1,506 @@
+{
+  "schemaVersion": 2,
+  "title": "订单从提交到发货",
+  "description": "主流程只有几张卡片，其中“履约发货”内部还有子流程，子流程内部还能继续展开：履约发货 → 拣货打包 → 复核商品。",
+  "constraints": "每一层只展示这一层需要关心的步骤。子流程只组织已有的节点，不增加新的执行步骤或连接。所有示例内容均为虚构。",
+  "nodes": [
+    {
+      "id": "receive",
+      "type": "start",
+      "position": {
+        "x": 400,
+        "y": 0
+      },
+      "data": {
+        "label": "收到订单",
+        "summary": "顾客提交了一笔新订单",
+        "notes": "顾客提交订单后开始处理。此时还没有扣款，也没有占用库存。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "normalize",
+      "type": "step",
+      "position": {
+        "x": 1300,
+        "y": 0
+      },
+      "data": {
+        "label": "整理订单字段",
+        "summary": "统一收货地址和商品数量的格式",
+        "notes": "去掉字段首尾空白，并把商品数量转换为整数。缺失的字段不做猜测，留给下一步判断。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "valid",
+      "type": "decision",
+      "position": {
+        "x": 1300,
+        "y": 216
+      },
+      "data": {
+        "label": "订单是否有效？",
+        "summary": "检查商品、数量和收货地址",
+        "notes": "三项都符合要求才算有效：商品存在、数量大于 0、收货地址完整。\n\n无效订单直接拒绝，不会发起扣款。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "charge",
+      "type": "step",
+      "position": {
+        "x": 1300,
+        "y": 500
+      },
+      "data": {
+        "label": "发起扣款",
+        "summary": "按订单金额向支付渠道扣款",
+        "notes": "使用订单号作为幂等键，重复提交同一订单不会重复扣款。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "paid",
+      "type": "decision",
+      "position": {
+        "x": 1300,
+        "y": 716
+      },
+      "data": {
+        "label": "扣款是否成功？",
+        "summary": "根据支付渠道的返回结果决定去向",
+        "notes": "成功后进入履约。失败时结束订单，不占用仓库资源。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "allocate",
+      "type": "step",
+      "position": {
+        "x": 1800,
+        "y": 0
+      },
+      "data": {
+        "label": "分配仓库",
+        "summary": "选择一个有货且离收货地址最近的仓库",
+        "notes": "订单只分配给一个仓库，不拆单。分配后锁定对应库存。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "pick",
+      "type": "step",
+      "position": {
+        "x": 2300,
+        "y": 0
+      },
+      "data": {
+        "label": "拣货",
+        "summary": "仓库人员按拣货单取出商品",
+        "notes": "拣货单列出商品、数量和货位。人员取货后把商品放到复核台。",
+        "role": "main",
+        "executor": "human",
+        "expanded": false
+      }
+    },
+    {
+      "id": "scan",
+      "type": "step",
+      "position": {
+        "x": 2800,
+        "y": 0
+      },
+      "data": {
+        "label": "扫描商品",
+        "summary": "逐件扫描，得到实际拣出的商品清单",
+        "notes": "扫描结果只用于和订单比对，不修改库存。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "match",
+      "type": "decision",
+      "position": {
+        "x": 2800,
+        "y": 216
+      },
+      "data": {
+        "label": "商品是否一致？",
+        "summary": "比对扫描清单和订单明细",
+        "notes": "商品和数量都相同才算一致。\n\n第一次不一致时退回重新拣货；连续两次不一致时停止处理，改为退款。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "box",
+      "type": "step",
+      "position": {
+        "x": 2300,
+        "y": 432
+      },
+      "data": {
+        "label": "装箱封口",
+        "summary": "把复核通过的商品装箱并贴上面单",
+        "notes": "按商品体积选择箱型。封箱后不再更改包裹内容。",
+        "role": "main",
+        "executor": "human",
+        "expanded": false
+      }
+    },
+    {
+      "id": "book",
+      "type": "step",
+      "position": {
+        "x": 3300,
+        "y": 0
+      },
+      "data": {
+        "label": "预约承运商",
+        "summary": "按包裹重量和地址选择承运商",
+        "notes": "预约成功后得到运单号和取件时间。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "handover",
+      "type": "step",
+      "position": {
+        "x": 3300,
+        "y": 216
+      },
+      "data": {
+        "label": "交付包裹",
+        "summary": "承运商取件并确认收货",
+        "notes": "承运商确认后，订单状态变为已发货，运单号写入订单。",
+        "role": "main",
+        "executor": "human",
+        "expanded": false
+      }
+    },
+    {
+      "id": "notify",
+      "type": "step",
+      "position": {
+        "x": 400,
+        "y": 864
+      },
+      "data": {
+        "label": "通知顾客",
+        "summary": "把运单号发送给顾客",
+        "notes": "通过顾客选择的渠道发送一次发货通知，内容包含运单号和查询方式。",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "done",
+      "type": "end",
+      "position": {
+        "x": 400,
+        "y": 1080
+      },
+      "data": {
+        "label": "订单已发货",
+        "summary": "包裹已在运输途中",
+        "notes": "",
+        "role": "main",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "rejected",
+      "type": "end",
+      "position": {
+        "x": 800,
+        "y": 216
+      },
+      "data": {
+        "label": "拒绝订单",
+        "summary": "告诉顾客需要修改的字段",
+        "notes": "返回无效字段的名称和原因。没有发生扣款。",
+        "role": "exception",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "payment-failed",
+      "type": "end",
+      "position": {
+        "x": 800,
+        "y": 432
+      },
+      "data": {
+        "label": "支付失败",
+        "summary": "提示顾客更换支付方式后重新下单",
+        "notes": "返回支付渠道给出的失败原因，并结束这笔订单。",
+        "role": "exception",
+        "executor": "program",
+        "expanded": false
+      }
+    },
+    {
+      "id": "pack-failed",
+      "type": "end",
+      "position": {
+        "x": 800,
+        "y": 648
+      },
+      "data": {
+        "label": "退款并取消订单",
+        "summary": "退回货款，释放已锁定的库存",
+        "notes": "已经扣款，因此必须先退款，再取消订单并告知顾客。",
+        "role": "exception",
+        "executor": "program",
+        "expanded": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "enter-verify",
+      "source": "receive",
+      "target": "normalize",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "normalized",
+      "source": "normalize",
+      "target": "valid",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "order-valid",
+      "source": "valid",
+      "target": "charge",
+      "label": "有效",
+      "role": "main"
+    },
+    {
+      "id": "charged",
+      "source": "charge",
+      "target": "paid",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "charge-ok",
+      "source": "paid",
+      "target": "allocate",
+      "label": "成功",
+      "role": "main"
+    },
+    {
+      "id": "allocated",
+      "source": "allocate",
+      "target": "pick",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "picked",
+      "source": "pick",
+      "target": "scan",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "scanned",
+      "source": "scan",
+      "target": "match",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "items-match",
+      "source": "match",
+      "target": "box",
+      "label": "一致",
+      "role": "main"
+    },
+    {
+      "id": "boxed",
+      "source": "box",
+      "target": "book",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "booked",
+      "source": "book",
+      "target": "handover",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "handed-over",
+      "source": "handover",
+      "target": "notify",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "notified",
+      "source": "notify",
+      "target": "done",
+      "label": "",
+      "role": "main"
+    },
+    {
+      "id": "order-invalid",
+      "source": "valid",
+      "target": "rejected",
+      "label": "无效",
+      "role": "exception"
+    },
+    {
+      "id": "charge-failed",
+      "source": "paid",
+      "target": "payment-failed",
+      "label": "失败",
+      "role": "exception"
+    },
+    {
+      "id": "items-mismatch",
+      "source": "match",
+      "target": "pick",
+      "label": "不一致，重新拣货",
+      "role": "support"
+    },
+    {
+      "id": "items-mismatch-twice",
+      "source": "match",
+      "target": "pack-failed",
+      "label": "连续两次不一致",
+      "role": "exception"
+    }
+  ],
+  "groups": [
+    {
+      "id": "verify",
+      "kind": "subflow",
+      "label": "校验订单",
+      "summary": "整理字段，再判断订单是否有效。",
+      "parentId": null,
+      "nodeIds": [
+        "normalize",
+        "valid"
+      ],
+      "order": [],
+      "position": {
+        "x": 400,
+        "y": 216
+      }
+    },
+    {
+      "id": "pay",
+      "kind": "subflow",
+      "label": "完成支付",
+      "summary": "发起扣款，并根据结果决定去向。",
+      "parentId": null,
+      "nodeIds": [
+        "charge",
+        "paid"
+      ],
+      "order": [],
+      "position": {
+        "x": 400,
+        "y": 432
+      }
+    },
+    {
+      "id": "fulfill",
+      "kind": "subflow",
+      "label": "履约发货",
+      "summary": "分配仓库，打包后交给承运商。",
+      "parentId": null,
+      "nodeIds": [
+        "allocate",
+        "pick",
+        "scan",
+        "match",
+        "box",
+        "book",
+        "handover"
+      ],
+      "order": [],
+      "position": {
+        "x": 400,
+        "y": 648
+      }
+    },
+    {
+      "id": "pack",
+      "kind": "subflow",
+      "label": "拣货打包",
+      "summary": "拣货，复核通过后装箱。",
+      "parentId": "fulfill",
+      "nodeIds": [
+        "pick",
+        "scan",
+        "match",
+        "box"
+      ],
+      "order": [],
+      "position": {
+        "x": 1800,
+        "y": 216
+      }
+    },
+    {
+      "id": "inspect",
+      "kind": "subflow",
+      "label": "复核商品",
+      "summary": "扫描实物，再和订单明细比对。",
+      "parentId": "pack",
+      "nodeIds": [
+        "scan",
+        "match"
+      ],
+      "order": [],
+      "position": {
+        "x": 2300,
+        "y": 216
+      }
+    },
+    {
+      "id": "ship",
+      "kind": "subflow",
+      "label": "交付承运",
+      "summary": "预约承运商，再把包裹交出去。",
+      "parentId": "fulfill",
+      "nodeIds": [
+        "book",
+        "handover"
+      ],
+      "order": [],
+      "position": {
+        "x": 1800,
+        "y": 432
+      }
+    }
+  ]
+}

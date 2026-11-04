@@ -44,7 +44,7 @@ Put task-wide scope and acceptance criteria in graph `description`/`constraints`
 
 Graph v2 explicitly marks node and edge roles. Use `main` for the principal behavior, `support` for secondary work and `exception` for failure handling. Roles describe relevance in this plan, not whether the operation is optional at runtime. Meaningful decisions and externally visible alternate outcomes must still be apparent from the main flow. Do not classify by matching words such as “error” in labels.
 
-The main view keeps primary loops and their nested loops visible, shows ordinary subflows as cards, and exposes omitted outgoing paths through branch buttons. The right inspector opens subflow and branch diagrams with their real entry and exit connections. Complete exports include these diagrams and all original data.
+The main view keeps primary loops and their nested loops visible, shows ordinary subflows as cards, and exposes omitted outgoing paths through branch buttons. Users open a subflow on the main canvas, one level at a time, with its real entry and exit connections shown as reference cards; branch diagrams open in the right inspector. Users can also create, move and dissolve subflows themselves, so reread the current graph before revising its groups. Complete exports include these diagrams and all original data.
 
 Use `subflow` groups for complicated internal behavior and `branch` groups for secondary paths. Nested groups explicitly declare their parent; this does not require visual containment. Peer groups may share a real node. Reuse its ID so it remains one card with one position. Groups reference original nodes; they do not add execution steps or new edges.
 

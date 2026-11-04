@@ -130,19 +130,27 @@ For command options, see the [CLI reference](../skills/diagram-plan/references/c
 
 ## Main flow, loops and reading details
 
-New v2 plans distinguish the main flow from secondary and exception paths. Actual loop steps sit around a circle, and nested loops remain visible. Smaller loops can sit outside larger ones and touch at a shared card. Logical nesting does not require one circle to contain the other. An ordinary subflow card opens its internal diagram in the right inspector; a branch button opens the relevant alternate path with its entry and outcome. The display toggle in the existing canvas toolbar shows secondary paths without saving a change.
+New v2 plans distinguish the main flow from secondary and exception paths. Actual loop steps sit around a circle, and nested loops remain visible. Smaller loops can sit outside larger ones and touch at a shared card. Logical nesting does not require one circle to contain the other. Double-click a subflow card, or use its **进入** action, to work inside it on the main canvas at full size; the breadcrumb and `Esc` lead back out, and each level remembers its viewport. Dashed cards at the edge of a level are its real outside connections; clicking one jumps to that step. A branch button opens the relevant alternate path with its entry and outcome in the inspector. The display toggle in the existing canvas toolbar shows secondary paths without saving a change.
 
 ![Nested loops touching at one shared card](images/tangent-loops.png)
 
-![Circular main flow with a subflow in the fixed inspector](images/circular-flow.png)
+![Circular main flow with a selected subflow](images/circular-flow.png)
 
 Cards use a title and short summary. Click a card to read complete Markdown notes in the fixed right inspector; choose **编辑节点** to change content. Reading, scrolling, branch navigation and display toggles do not create revisions or use undo/redo history. The default program label is omitted from repeated cards; the inspector retains executor information.
 
 The existing sidebar and toolbar locations remain. The palette is unchanged; typography, card boundaries and selection styling are refined. Complete PNG exports contain the main diagram, separate branch/subflow diagrams, full notes and every edge condition.
 
-In **编辑节点**, change **显示分类** to correct the main/support/exception classification. A node can belong to several groups; under **所属分组**, choose **移出** for the membership to remove. Removing membership in a parent also removes membership in its descendants. The node and its connections remain. Dragging a shared card moves only that card; **整理布局** arranges the loops again. Deleting or reconnecting a required loop edge changes that group to a subflow so the diagram no longer claims a closed cycle. New group definitions and circular order are authored through Graph v2 and agent revisions.
+In **编辑节点**, change **显示分类** to correct the main/support/exception classification.
 
-Drag from any point on a card's outline to create a connection. Select a connection to move either endpoint along a card's outline or to another card. These edits save precise endpoint positions and support undo/redo. Automatic loop endpoints follow the circle where it meets each rounded card.
+Nesting is authored directly:
+
+- **Group existing steps:** Shift-click or Shift-drag to select cards, then choose **组成子流程** (`⌘/Ctrl G`). The new subflow belongs to the level you are on, so groups can nest to any depth.
+- **Start empty:** **子流程** in the bottom dock adds a subflow holding one new step.
+- **Move steps:** drag a card onto a subflow card to move it in, or use **移入子流程** in the node editor. Inside a level, select cards and choose **移到上一层**, or use **移出** under **所属分组**. Removing membership in a parent also removes membership in its descendants. A node can belong to several groups, and its connections are never changed by these moves.
+- **Connect:** dragging a connection to or from a subflow card creates a real edge to its first or from its last step. Open the subflow to change which inner step it uses.
+- **Dissolve:** **解散子流程** (`⌘/Ctrl Shift G`) removes only the summary. Its steps expand in place at the level above and later cards move down to make room.
+
+Steps on a loop's closed route cannot be grouped, because that would break the route. Dragging a shared card moves only that card; **整理布局** arranges the loops again. Deleting or reconnecting a required loop edge changes that group to a subflow so the diagram no longer claims a closed cycle. Loop groups and their circular order are still authored through Graph v2 and agent revisions.
 
 Selecting a connection also offers **显示分类**: main paths use bold solid lines, support paths use fine solid lines, and exception paths use fine dashed lines. Main loop connections receive extra weight. The editor, right-side diagrams and PNG export share these styles; agents select them through `edge.role` and loop groups.
 

@@ -80,6 +80,7 @@ export interface TaskSummary {
 }
 export interface HistoricalVersion extends Version { graph: Graph }
 export const KIND_LABELS: Record<NodeKind, string> = { start: '开始', step: '处理步骤', decision: '条件判断', end: '结束' };
+export const GROUP_KIND_LABELS: Record<GraphGroup['kind'], string> = { subflow: '子流程', loop: '循环', branch: '分支' };
 export const EXECUTOR_LABELS: Record<Executor, string> = { program: '程序', llm: 'LLM', human: '人工' };
 export const STATUS_LABELS: Record<Status, string> = { draft: '草稿', awaiting_agent: '等待 agent 修订', approved: '已确认', cancelled: '已暂停' };
 export const VERSION_LABELS: Record<string, string> = {

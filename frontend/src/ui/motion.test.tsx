@@ -16,9 +16,9 @@ describe('bounded workspace motion', () => {
     expect(dockProximity(100, 100, 0)).toBe(0);
   });
 
-  it('keeps all four creation actions as labeled native buttons', () => {
+  it('keeps all five creation actions as labeled native buttons', () => {
     const html = renderToStaticMarkup(<NodeDock disabled={false} onAdd={() => {}} />);
-    expect(html.match(/<button /g)).toHaveLength(4);
+    expect(html.match(/<button /g)).toHaveLength(5);
     expect(html).toContain('aria-label="添加条件判断"');
     expect(html).toContain('aria-label="添加处理步骤"');
     expect(html).toContain('data-motion="static"');
@@ -27,7 +27,7 @@ describe('bounded workspace motion', () => {
 
   it('disables the complete dock for read-only states', () => {
     const html = renderToStaticMarkup(<NodeDock disabled onAdd={() => {}} />);
-    expect(html.match(/disabled=""/g)).toHaveLength(4);
+    expect(html.match(/disabled=""/g)).toHaveLength(5);
     expect(html).toContain('data-motion="static"');
   });
 

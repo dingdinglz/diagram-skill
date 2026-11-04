@@ -22,5 +22,6 @@ export {
   LockKey as LockKeyhole, Image, FileText, FolderOpen,
   MagnifyingGlass as Search, SidebarSimple as PanelLeft, Command as Keyboard,
   FlowArrow as Workflow, Desktop as Monitor, SlidersHorizontal, Minus,
+  ArrowUp, CaretDown as ChevronDown, ArrowSquareOut as Jump, SignIn as Enter, SelectionPlus as GroupSelection, ArrowElbowLeftUp as MoveUp,
   BookOpen, PencilSimple as Pencil, SunDim as AmbientLight,
 } from '@phosphor-icons/react';
