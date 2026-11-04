@@ -24,5 +24,5 @@ export {
   FlowArrow as Workflow, Desktop as Monitor, SlidersHorizontal, Minus,
   ArrowsDownUp as Reverse, ArrowsClockwise as LoopIcon, UploadSimple as Import, Eye as Preview,
   ArrowUp, CaretDown as ChevronDown, ArrowSquareOut as Jump, SignIn as Enter, SelectionPlus as GroupSelection, ArrowElbowLeftUp as MoveUp,
-  BookOpen, PencilSimple as Pencil, SunDim as AmbientLight,
+  BookOpen, TreeStructure as LevelMapIcon, PencilSimple as Pencil, SunDim as AmbientLight,
 } from '@phosphor-icons/react';

@@ -405,7 +405,29 @@ kbd { font-size: var(--text-small); line-height: 22px; min-width: 24px; padding:
 .level-bar li > button { max-width: 170px; padding: 5px 6px; border-radius: 5px; color: var(--reading-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .level-bar li > button:hover { background: var(--soft-surface); color: var(--ink); }
 .level-bar li > button[aria-current] { color: var(--ink); font-weight: var(--weight-semibold); }
-.level-gap > span { padding: 0 4px; }
+.level-gap > button { padding-inline: 8px; }
+.level-map-toggle { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; margin-left: 4px; padding: 5px 8px; border-radius: 5px; color: var(--reading-muted); font-size: var(--text-meta); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.level-map-toggle:hover { background: var(--soft-surface); color: var(--ink); }
+.level-map-toggle.is-open { background: var(--accent-soft); color: var(--accent-hover); }
+.level-map { position: absolute; z-index: 4; left: 16px; width: 248px; max-width: calc(100% - 32px); min-height: 66px; overflow-y: auto; overscroll-behavior: contain; padding: 4px; background: var(--paper); border: 1px solid var(--line-float); border-radius: var(--radius-float); box-shadow: var(--shadow-float); animation: level-map-in 160ms var(--ease-out); }
+@keyframes level-map-in { from { opacity: 0; transform: translateY(-4px); } }
+.level-map ol { margin: 0; padding: 0; list-style: none; }
+.level-map li { position: relative; }
+.level-map li + li { margin-top: 6px; }
+.level-map li + li::before { content: ""; position: absolute; left: 41px; top: -9px; width: 1px; height: 12px; background: var(--line-strong); }
+.level-map button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 3px 8px 3px 4px; border-radius: 7px; text-align: left; }
+.level-map button:hover { background: var(--soft-surface); }
+.level-map button[aria-current] { background: var(--accent-soft); }
+.level-map-text { display: grid; gap: 1px; min-width: 0; }
+.level-map-text strong { overflow: hidden; color: var(--ink); font-size: var(--text-meta); font-weight: var(--weight-medium); line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.level-map-text small { overflow: hidden; color: var(--reading-muted); font-size: var(--text-small); line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.level-map button[aria-current] strong { color: var(--accent-hover); font-weight: var(--weight-semibold); }
+.level-thumb { position: relative; flex-shrink: 0; background: var(--canvas); border: 1px solid var(--line); border-radius: 5px; }
+.level-map button[aria-current] .level-thumb { background: var(--paper); border-color: #4263df33; }
+.level-thumb path { fill: none; stroke: var(--line-strong); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+.level-thumb rect { fill: var(--flow-edge-support); opacity: .62; }
+.level-thumb rect.is-group { opacity: 1; fill: var(--flow-edge-main); }
+.level-thumb rect.is-marked { opacity: 1; fill: var(--accent); stroke: var(--paper); stroke-width: 1px; paint-order: stroke; }
 .selection-bar { position: absolute; bottom: 38px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; width: max-content; max-width: calc(100% - 32px); padding: 6px; background: var(--paper); border: 1px solid var(--line-float); border-radius: 12px; box-shadow: var(--shadow-float); }
 .selection-count { padding: 0 8px; font-size: var(--text-ui); color: var(--reading-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .selection-count strong { color: var(--ink); font-weight: var(--weight-semibold); }
@@ -466,6 +488,7 @@ button.outline-toggle:hover { color: var(--ink); background: var(--soft-surface)
   .mobile-review-meta { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 9px; width: 100%; font-size: var(--text-meta); color: var(--reading-muted); line-height: 1.5; }
   .mobile-save-status { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }.mobile-save-status svg { width: 14px; height: 14px; color: var(--success); }.mobile-save-status.offline, .mobile-save-status.offline svg { color: var(--danger); }
   .node-palette { padding: 5px; gap: 2px; }.dock-label, .node-palette .toolbar-divider { display: none; }
+  .level-map { width: min(320px, calc(100% - 32px)); }.level-map button { min-height: 58px; }.level-map-toggle { min-height: 44px; }.level-bar li > button { min-height: 44px; }
   .react-flow__minimap { display: none; }.canvas-zoom { right: 12px; bottom: 104px; flex-direction: column; }.canvas-zoom > button, .canvas-zoom .zoom-value { width: 44px; height: 44px; border-right: 0; border-bottom: 1px solid var(--line); }.canvas-zoom > button:last-child { border-bottom: 0; }
   .empty-canvas { max-width: 87%; top: 43%; }.empty-canvas h2 { font-size: var(--text-heading); }
   .message-bar { padding: 10px 12px; font-size: var(--text-meta); align-items: flex-start; flex-wrap: wrap; gap: 7px; }.message-bar > span { flex-basis: calc(100% - 30px); min-width: 0; overflow-wrap: anywhere; }.message-bar button { min-height: 44px; }.history-view-banner { padding-inline: 12px; }
@@ -476,6 +499,7 @@ button.outline-toggle:hover { color: var(--ink); background: var(--soft-surface)
 @media (max-width: 350px) { .canvas-toolbar { flex-wrap: wrap; }.canvas-toolbar .readable-view { margin-left: auto; }.inspector-tabs { padding-inline: 12px; gap: 12px; } }
 @media (max-height: 560px) { .modal-backdrop { padding-block: 10px; }.modal { max-height: calc(100dvh - 20px); }.modal-content { padding-block: 24px; }.modal-icon { display: none; }.modal-content textarea { height: 100px; min-height: 84px; }.modal-actions { padding-bottom: 20px; } }
 @media (prefers-reduced-motion: reduce) {
+  .level-map { animation: none; }
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
   .button:active:not(:disabled) { transform: none; }
   /* Cut short an entrance already in flight when the OS preference changes. */

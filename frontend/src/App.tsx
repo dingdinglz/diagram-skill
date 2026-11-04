@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, MiniMap, ViewportPortal, useReactFlow, useViewport, getViewportForBounds, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
-import { ArrowDown, ArrowDownToLine, ArrowRight, Check, CheckCheck, ChevronRight, Clock3, FileJson, GitBranch, History, LayoutGrid, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Trash2, Undo2, X, AlertCircle, Pause, Image, FileText, Search, PanelLeft, Keyboard, Minus, BookOpen, NODE_ICONS, AmbientLight, ArrowUp, GroupSelection, MoveUp, LoopIcon, Reverse, Import, IconContext, UI_ICON_STYLE } from './icons';
+import { ArrowDown, ArrowDownToLine, ArrowRight, Check, CheckCheck, ChevronRight, Clock3, FileJson, GitBranch, History, LayoutGrid, LevelMapIcon, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Trash2, Undo2, X, AlertCircle, Pause, Image, FileText, Search, PanelLeft, Keyboard, Minus, BookOpen, NODE_ICONS, AmbientLight, ArrowUp, GroupSelection, MoveUp, LoopIcon, Reverse, Import, IconContext, UI_ICON_STYLE } from './icons';
 import { BrandMark } from './BrandMark';
 import { LayoutGroup, MotionConfig, motion } from 'motion/react';
 import { ContentTransition, SelectionIndicator, UI_TRANSITION } from './ui/Motion';
@@ -17,6 +17,8 @@ import { createRootScene, createScene, nodePorts } from './geometry';
 import { connectingEdge, createLoop, freeSpot, insertOnEdge, loopRoute, reverseEdge, setRoles, STEP_GAP } from './authoring';
 import { addNodeAtLevel, createEmptySubflow, createGroup, dissolveGroup, groupEndpoint, groupingBlock, groupPath, levelOf, moveIntoGroup, moveToParentLevel } from './groups';
 import { closestOutlinePoint, containsRounded, outlineAnchor, projectAnchor, type Point } from './anchors';
+import { LevelMap } from './LevelMap';
+import { levelChain, levelMap } from './levelMap';
 import { NodeInspector } from './NodeInspector';
 import { Dialog } from './Dialog';
 import { GraphInspector } from './GraphInspector';
@@ -86,7 +88,17 @@ function Workspace() {
   const warnings = graphWarnings(displayGraph);
   // An undo or agent revision can remove a level; fall back to the nearest level that still exists.
   const levelId = useMemo(() => [...levelTrail].reverse().find(id => groupsOf(displayGraph).some(g => g.id === id)) || null, [levelTrail, displayGraph]);
-  const levelPath = useMemo(() => groupPath(displayGraph, levelId), [displayGraph, levelId]);
+  const levelPath = useMemo(() => levelChain(displayGraph, levelId), [displayGraph, levelId]);
+  const [levelMapOpen, setLevelMapOpen] = useState(() => {
+    if (window.innerWidth <= 760) return false;
+    try { return localStorage.getItem('flowplan:level-map') !== 'off'; } catch { return true; }
+  });
+  const toggleLevelMap = () => {
+    const next = !levelMapOpen;
+    setLevelMapOpen(next);
+    if (!narrow) try { localStorage.setItem('flowplan:level-map', next ? 'on' : 'off'); } catch { /* Storage can be unavailable. */ }
+  };
+  const levelEntries = useMemo(() => levelMapOpen && levelId ? levelMap(displayGraph, levelId, showBranches, nodeMeasurements) : [], [levelMapOpen, displayGraph, levelId, showBranches, nodeMeasurements]);
 
   useEffect(() => {
     setSelectedNodeId(null); setSelectedEdgeId(null); setHistorical(null); setShowBranches(false); setDetailScope(undefined); setSidebarOpen(false);
@@ -94,7 +106,12 @@ function Workspace() {
   }, [ws.task?.id]);
   useEffect(() => {
     const media = window.matchMedia('(max-width: 760px)');
-    const update = () => { setNarrow(media.matches); setSidebarOpen(false); if (media.matches) setPanelOpen(false); };
+    const update = () => {
+      setNarrow(media.matches); setSidebarOpen(false); if (media.matches) setPanelOpen(false);
+      let remembered = true;
+      try { remembered = localStorage.getItem('flowplan:level-map') !== 'off'; } catch { /* Storage can be unavailable. */ }
+      setLevelMapOpen(!media.matches && remembered);
+    };
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
@@ -132,10 +149,16 @@ function Workspace() {
     if (!box?.width || !box.height) return;
     const topInset = (toolbarRef.current?.offsetHeight || 52) + (levelPath.length ? 76 : 24);
     const usableHeight = Math.max(100, box.height - topInset - 100);
-    const viewport = getViewportForBounds(scene.bounds, box.width, usableHeight, .15, 1, .06);
+    let viewport = getViewportForBounds(scene.bounds, box.width, usableHeight, .15, 1, .06);
+    // Keep the fitted graph clear of the level map when there is room to do so; a centered column needs no shift.
+    const mapRight = !narrow && levelMapOpen && levelPath.length ? (canvas.current?.querySelector('.level-map')?.getBoundingClientRect().right || box.left + 264) - box.left + 12 : 0;
+    if (mapRight && box.width - mapRight >= 420 && viewport.x + scene.bounds.x * viewport.zoom < mapRight) {
+      const inset = getViewportForBounds(scene.bounds, box.width - mapRight, usableHeight, .15, 1, .06);
+      viewport = { ...inset, x: inset.x + mapRight };
+    }
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     void flow.setViewport({ ...viewport, y: viewport.y + topInset }, { duration: reduced ? 0 : duration });
-  }, [flow, scene.bounds, levelPath.length]);
+  }, [flow, scene.bounds, levelPath.length, levelMapOpen, narrow]);
   const readCanvas = () => {
     const box = canvas.current?.getBoundingClientRect();
     const node = view.nodes.find(node => node.id === selectedNodeId) || view.nodes[0];
@@ -208,6 +231,12 @@ function Workspace() {
     if (!level && !buildView(displayGraph).nodes.some(n => n.id === id)) setShowBranches(true);
     openDetails(id);
   }, [displayGraph, levelId, goToLevel, openDetails]);
+  // Index 0 is the main flow; the last index is the level already on screen, which re-opens its description.
+  const jumpToLevel = (index: number) => {
+    if (index === levelPath.length) { setSelectedNodeId(null); setSelectedEdgeId(null); setMultiIds(new Set()); setPanel('details'); setPanelOpen(true); return; }
+    goToLevel(levelPath[index - 1]?.id || null, levelPath[index].id, { x: (canvas.current?.clientWidth || 0) / 2, y: (canvas.current?.clientHeight || 0) / 2, direction: 'out' });
+  };
+  const levelBarTop = (toolbarRef.current?.offsetHeight || 56) + 12;
   const firstLevel = useRef(true);
   useEffect(() => {
     if (firstLevel.current) { firstLevel.current = false; return; }
@@ -458,6 +487,7 @@ function Workspace() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSidebarOpen(true); searchRef.current?.focus(); return; }
       if ((event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) { if (event.key === 'Escape') (event.target as HTMLElement).blur(); return; }
       if (event.key === 'Escape') {
+        if (narrow && levelMapOpen) { setLevelMapOpen(false); return; }
         if (levelId && !selectedNodeId && !selectedEdgeId && !multiIds.size && !connectionDrag) { leaveLevel(); return; }
         setSidebarOpen(false); if (narrow) setPanelOpen(false); setSelectedEdgeId(null); setSelectedNodeId(null); setMultiIds(new Set()); return;
       }
@@ -614,17 +644,18 @@ function Workspace() {
             <p>{ws.task ? '添加节点，连接步骤。' : '新建空白流程，或让 agent 生成初稿。'}</p>
             {ws.task ? <GlareHover className="button primary" disabled={!editable} onClick={() => addNode('start')}><Plus size={16} />添加开始节点</GlareHover> : <GlareHover className="button primary" disabled={!ws.initialized || !hasToken()} onClick={() => setDialog('new')}><Plus size={16} />创建第一张流程图</GlareHover>}
           </SpotlightCard>}
-          {!!levelPath.length && <nav className="level-bar" aria-label="当前层级" style={{ top: (toolbarRef.current?.offsetHeight || 56) + 12 }}>
+          {!!levelPath.length && <nav className="level-bar" aria-label="当前层级" style={{ top: levelBarTop }}>
             <button className="icon-button" aria-label="返回上一层" title="返回上一层 Esc" onClick={leaveLevel}><ArrowUp size={18} /></button>
             <ol>
-              <li><button onClick={() => goToLevel(null, levelPath[0].id, { x: (canvas.current?.clientWidth || 0) / 2, y: (canvas.current?.clientHeight || 0) / 2, direction: 'out' })}>主流程</button></li>
-              {levelPath.length > 3 && <li className="level-gap" aria-hidden="true"><ChevronRight size={14} /><span>…</span></li>}
+              <li><button onClick={() => jumpToLevel(0)}>主流程</button></li>
+              {levelPath.length > 3 && <li className="level-gap"><ChevronRight size={14} /><button aria-label={`展开全部 ${levelPath.length + 1} 层`} title="查看全部层级" aria-expanded={levelMapOpen} aria-controls="level-map" onClick={toggleLevelMap}>…</button></li>}
               {levelPath.map((group, index) => index < levelPath.length - 2 && levelPath.length > 3 ? null : <li key={group.id}><ChevronRight size={14} />
-                {index === levelPath.length - 1 ? <button aria-current="location" title={group.label} onClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setMultiIds(new Set()); setPanel('details'); setPanelOpen(true); }}>{group.label || '未命名子流程'}</button>
-                  : <button title={group.label} onClick={() => goToLevel(group.id, levelPath[index + 1].id, { x: (canvas.current?.clientWidth || 0) / 2, y: (canvas.current?.clientHeight || 0) / 2, direction: 'out' })}>{group.label || '未命名子流程'}</button>}
+                <button aria-current={index === levelPath.length - 1 ? 'location' : undefined} title={group.label} onClick={() => jumpToLevel(index + 1)}>{group.label || '未命名子流程'}</button>
               </li>)}
             </ol>
+            <button className={`level-map-toggle${levelMapOpen ? ' is-open' : ''}`} aria-expanded={levelMapOpen} aria-controls="level-map" aria-label={`第 ${levelPath.length + 1} 层，${levelMapOpen ? '收起' : '展开'}层级结构`} title={levelMapOpen ? '收起层级结构' : '展开层级结构'} onClick={toggleLevelMap}><LevelMapIcon size={16} />第 {levelPath.length + 1} 层</button>
           </nav>}
+          {!!levelEntries.length && <LevelMap entries={levelEntries} selectedId={selectedNodeId} top={levelBarTop + 50} onSelect={index => { jumpToLevel(index); if (narrow) setLevelMapOpen(false); }} />}
           {!!displayGraph.nodes.length && <div className="canvas-legend">{levelId ? <span>本层 <strong>{view.nodes.filter(n => !n.reference).length}</strong> 项</span> : <><span><strong>{displayGraph.nodes.length}</strong> 个节点</span><span className="legend-separator" aria-hidden="true" /><span><strong>{displayGraph.edges.length}</strong> 条连线</span></>}</div>}
           {!!displayGraph.nodes.length && <div className="canvas-zoom" role="group" aria-label="画布缩放"><button aria-label="放大画布" title="放大" onClick={() => zoomCanvas('in')} disabled={zoom >= 1.7}><Plus size={16} /></button><button className="zoom-value" aria-label={`当前缩放 ${Math.round(zoom * 100)}%，点击以 100% 阅读`} onClick={readCanvas}>{Math.round(zoom * 100)}%</button><button aria-label="缩小画布" title="缩小" onClick={() => zoomCanvas('out')} disabled={zoom <= .15}><Minus size={16} /></button><button aria-label="查看流程全貌" title="查看全貌" onClick={() => fitCanvas(250)}><Maximize size={15} /></button></div>}
           {!!ws.task && !multiSelected.length && <NodeDock disabled={!editable} context={dockContext} onAdd={type => type === 'group' ? addSubflow() : addNode(type)} />}

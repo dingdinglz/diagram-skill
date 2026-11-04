@@ -273,6 +273,8 @@ Controls are gently rounded, not pill-shaped by default: button (7px), field/too
 
 `level-bar` is a floating `paper` breadcrumb with `shadow-float`, placed under the canvas toolbar. Group cards use `.is-group`: the 248×116 card plus two inset lower layers (`node-surface`, then `soft-surface`) that take `accent` when selected. `.reference-node` is a translucent dashed card with no filled icon tile and a blue jump label. `.is-drop-target` uses `accent-soft` with a 2px `accent` outline. `selection-bar` takes the dock's exact position and surface. The inspector outline uses 32px rows, 16px node icons and a 1px `line` guide per depth.
 
+`level-map` is a 248px floating `paper` frame under `level-bar`, sharing its surface. Each row is one level, main flow first: a 72×50 thumbnail of that level's real geometry beside its name and position. Thumbnails use `accent` for the card leading to the next level, `flow-edge-main` for other group cards and a muted `flow-edge-support` for steps; the current row takes `accent-soft` and marks the selected card. Enclosing loops are context in the position text, not levels. The `第 N 层` toggle at the end of `level-bar` shows or hides the frame; the preference is remembered on desktop, and at ≤760px the frame starts closed and closes after a jump. Fitting a level shifts the graph clear of the frame only when they would overlap.
+
 ## Do's and Don'ts
 
 ### Do:
