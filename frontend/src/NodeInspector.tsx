@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft, ChevronRight, GroupSelection, Pencil, Trash2 } from './icons';
+import { ArrowLeft, ChevronRight, GroupSelection, Pencil, Preview, Trash2 } from './icons';
 import type { Graph, Executor, NodeKind, FlowRole } from './types';
 import { EXECUTOR_LABELS, KIND_LABELS } from './types';
 import { Markdown } from './Markdown';
@@ -16,12 +16,14 @@ export function NodeInspector({ graph, selectedId, initialScope, levelId, autoEd
 }) {
   const selectedGroup=groupsOf(graph).find(g=>g.id===selectedId);
   const [trail,setTrail]=useState<Page[]>([selectedGroup?{groupId:selectedId}:{nodeId:selectedId},...(initialScope?[{scope:initialScope}]:[])]);
-  const [editing,setEditing]=useState(false);
+  const [editing,setEditing]=useState(autoEdit&&editable&&!selectedGroup);
+  const [notesPreview,setNotesPreview]=useState(false);
   const headingRef=useRef<HTMLHeadingElement>(null);
-  const focusNext=useRef<'reader'|'editor'|null>(null);
+  const focusNext=useRef<'reader'|'editor'|null>(autoEdit&&editable&&!selectedGroup?'editor':null);
+  const selectLabel=useRef(autoEdit);
   const editMode=(value:boolean)=>{focusNext.current=value?'editor':'reader';setEditing(value);};
   useLayoutEffect(()=>{
-    if(focusNext.current==='editor')document.getElementById('node-label')?.focus();
+    if(focusNext.current==='editor'){const field=document.getElementById('node-label') as HTMLTextAreaElement|null;field?.focus();if(selectLabel.current)field?.select();selectLabel.current=false;}
     else if(focusNext.current==='reader')headingRef.current?.focus({preventScroll:true});
     focusNext.current=null;
   },[editing,trail]);
@@ -57,7 +59,7 @@ export function NodeInspector({ graph, selectedId, initialScope, levelId, autoEd
         <label className="field-label" htmlFor="node-role">显示分类</label><select id="node-role" value={node.data.role||'main'} onChange={e=>update({role:e.target.value as FlowRole})}><option value="main">主线</option><option value="support">次要步骤</option><option value="exception">异常处理</option></select>
         {groupsOf(graph).some(g=>g.nodeIds.includes(node.id))&&<div className="node-memberships field-hint"><span>所属分组</span>{groupsOf(graph).filter(g=>g.nodeIds.includes(node.id)).map(memberGroup=><div className="node-membership" key={memberGroup.id}><span>{memberGroup.label}</span><button className="button subtle" aria-label={`从 ${memberGroup.label} 移出节点`} onClick={()=>onEdit(ungroupNode(graph,node.id,memberGroup.id))}>移出</button></div>)}</div>}
         {!groupingBlock(graph,[node.id])&&(()=>{const targets=groupOutline(graph,levelOf(graph,node.id)).filter(item=>item.groupId&&groupsOf(graph).find(g=>g.id===item.groupId)?.kind!=='loop');return !!targets.length&&<><label className="field-label" htmlFor="node-move">移入子流程</label><select id="node-move" value="" onChange={e=>{if(e.target.value)onEdit(moveIntoGroup(graph,[node.id],e.target.value));}}><option value="">选择同一层的子流程…</option>{targets.map(item=><option key={item.id} value={item.groupId}>{item.data.label}</option>)}</select></>;})()}
-        <label className="field-label" htmlFor="node-notes">完整说明</label><textarea id="node-notes" className="notes-textarea" rows={11} value={node.data.notes} onChange={e=>update({notes:e.target.value})}/>
+        <div className="field-label-row"><label className="field-label" htmlFor="node-notes">完整说明<span>支持 Markdown</span></label><button className="toolbar-text-button" aria-pressed={notesPreview} onClick={()=>setNotesPreview(v=>!v)}>{notesPreview?<Pencil size={14}/>:<Preview size={14}/>}{notesPreview?'继续编辑':'预览'}</button></div>{notesPreview?<div className="reader-notes notes-preview"><Markdown text={node.data.notes||'暂无补充说明。'}/></div>:<textarea id="node-notes" className="notes-textarea" rows={11} value={node.data.notes} onChange={e=>update({notes:e.target.value})}/>}
         <button className="button subtle danger" aria-label="删除选中节点" onClick={()=>{if(node.id===selectedId)onDelete();else{onEdit(removeNodes(graph,[node.id]));setTrail(t=>t.slice(0,-1));}}}><Trash2 size={14}/>删除节点</button>
       </>}
       <div className="node-identity">节点 ID <code>{node.id}</code></div>

@@ -57,6 +57,6 @@ const FlowNode = memo(function FlowNode({ id, type, data, selected, isConnectabl
   </div>;
 });
 export const LoopArea = memo(function LoopArea({ data }: NodeProps<CanvasNode>) {
-  return <div className="loop-area" style={{ width: 2 * data.loopRadius!, height: 2 * data.loopRadius! }}><button className="loop-caption nodrag nopan" onClick={data.onGroup}><span>{data.label}</span><small>查看循环说明</small></button></div>;
+  return <div className="loop-area" style={{ width: 2 * data.loopRadius!, height: 2 * data.loopRadius! }}><button className="loop-caption nopan" title="点击查看说明，拖动移动整个循环" onClick={data.onGroup}><span>{data.label}</span><small>查看循环说明</small></button></div>;
 });
 export default FlowNode;

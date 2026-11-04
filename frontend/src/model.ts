@@ -11,7 +11,7 @@ export function createNode(kind: NodeKind, position: { x: number; y: number }): 
   const labels = { start: '流程开始', step: '新的处理步骤', decision: '是否满足条件？', end: '流程结束' };
   return { id: newId('node'), type: kind, position, data: { label: labels[kind], notes: '', executor: 'program', expanded: false } };
 }
-function validLoop(graph: Graph, group: GraphGroup): boolean {
+export function validLoop(graph: Graph, group: GraphGroup): boolean {
   if (!group.order.length) return false;
   const sets = group.order.map(id => new Set(graph.groups?.find(c => c.id === id && c.parentId === group.id)?.nodeIds
     || (group.nodeIds.includes(id) ? [id] : [])));

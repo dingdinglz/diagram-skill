@@ -64,7 +64,7 @@ function DockItem({ type, hint, pointer, enabled, disabled, onAdd }: {
   </button>;
 }
 
-export function NodeDock({ disabled, onAdd }: { disabled: boolean; onAdd: (type: DockType) => void }) {
+export function NodeDock({ disabled, context = '添加节点', onAdd }: { disabled: boolean; context?: string; onAdd: (type: DockType) => void }) {
   const pointer = useMotionValue(Infinity);
   const reduced = useReducedMotion();
   const canHover = useSyncExternalStore(subscribe, snapshot, serverSnapshot);
@@ -85,7 +85,7 @@ export function NodeDock({ disabled, onAdd }: { disabled: boolean; onAdd: (type:
   return <SpotlightCard disabled={disabled} className="node-palette" role="toolbar" aria-label="添加流程节点" data-motion={enabled ? 'spring' : 'static'}
     onPointerMove={event => { if (enabled && event.pointerType !== 'touch') pointer.set(event.clientX); }}
     onPointerLeave={() => pointer.set(Infinity)} onPointerCancel={() => pointer.set(Infinity)} onKeyDown={navigate}>
-    <span className="dock-label">添加节点</span><span className="toolbar-divider" />
+    <span className="dock-label" title={context}>{context}</span><span className="toolbar-divider" />
     {items.map(item => <DockItem key={item.type} {...item} pointer={pointer} enabled={enabled} disabled={disabled} onAdd={onAdd} />)}
   </SpotlightCard>;
 }

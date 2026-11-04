@@ -142,6 +142,15 @@ The existing sidebar and toolbar locations remain. The palette is unchanged; typ
 
 In **编辑节点**, change **显示分类** to correct the main/support/exception classification.
 
+Building a flow by hand:
+
+- **Keep going:** with a card selected, the bottom dock adds the next node already connected to it, with its name ready to type. Press `Esc` twice to clear the selection and add an unconnected node.
+- **Insert:** with a connection selected, the dock places the new node in the middle of it. The condition stays on the first half.
+- **Edit in place:** double-click a card to edit its text. **完整说明** has a Markdown preview. Drawing an exit from a decision moves focus to its condition.
+- **Reverse:** select a connection and choose **反转方向**.
+- **Classify together:** with several cards selected, **分类** applies main/support/exception to the cards and the connections between them.
+- **Import:** **新建流程 → 导入流程 JSON** opens a saved Graph file as a new draft after the same validation agents go through.
+
 Nesting is authored directly:
 
 - **Group existing steps:** Shift-click or Shift-drag to select cards, then choose **组成子流程** (`⌘/Ctrl G`). The new subflow belongs to the level you are on, so groups can nest to any depth.
@@ -150,7 +159,9 @@ Nesting is authored directly:
 - **Connect:** dragging a connection to or from a subflow card creates a real edge to its first or from its last step. Open the subflow to change which inner step it uses.
 - **Dissolve:** **解散子流程** (`⌘/Ctrl Shift G`) removes only the summary. Its steps expand in place at the level above and later cards move down to make room.
 
-Steps on a loop's closed route cannot be grouped, because that would break the route. Dragging a shared card moves only that card; **整理布局** arranges the loops again. Deleting or reconnecting a required loop edge changes that group to a subflow so the diagram no longer claims a closed cycle. Loop groups and their circular order are still authored through Graph v2 and agent revisions.
+- **Loops:** select the cards on the route and choose **组成循环**; the order comes from their connections and the cards move onto a circle. If they form a line that is not yet closed, **补回边成环** also adds the closing connection. A subflow converts in either direction in its editor, which also sets its size and its subflow/branch type. Drag a loop's caption to move the whole ring.
+
+Steps on a loop's closed route cannot be grouped into a subflow, because that would break the route. Dragging a shared card moves only that card; **整理布局** arranges the loops again. Deleting or reconnecting a required loop edge changes that group to a subflow so the diagram no longer claims a closed cycle.
 
 Selecting a connection also offers **显示分类**: main paths use bold solid lines, support paths use fine solid lines, and exception paths use fine dashed lines. Main loop connections receive extra weight. The editor, right-side diagrams and PNG export share these styles; agents select them through `edge.role` and loop groups.
 

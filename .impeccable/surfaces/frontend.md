@@ -39,6 +39,10 @@ Graph-level description and constraints now read as Markdown by default. Explici
 
 Subflows are worked on the main canvas, one level at a time, never in a scaled preview: double-click, **进入** or Enter goes in; `Esc`, the up arrow or a breadcrumb crumb comes back and restores that level's viewport. The floating `level-bar` sits under the toolbar and collapses middle crumbs past three levels. With nothing selected inside a level, the inspector describes that level. `GroupPanel` replaces the mini diagram for groups with a readable outline and boundary connections; branch diagrams stay in the inspector. Group cards keep 248×116 with a two-layer stacked lower edge and a step count instead of an executor; external references are dashed, cannot be dragged, and jump on click. Multi-selection swaps the dock for `selection-bar` in the same place. New groups open with the name focused. The level change is a single 240ms scale/fade from the entered card, removed under reduced motion. `FlowScope` hides inside a level because every level shows all of its items.
 
+## Direct authoring
+
+Everything an agent can write has a direct path. The dock's label states what it will do: `添加节点`, `接在 X 后` (connected to the selected card) or `插入到连线` (splits the selected edge). New nodes and groups open with their name selected. `Esc` in a field blurs it first. Loops form from a selection along its real edges and never invent a connection silently: the closing edge is named on the action. Multi-selection adds `组成循环` and a role select to `selection-bar`.
+
 ## Interaction motion
 
 Bundled Motion powers two local React Bits adaptations: Dock's cosine-squared proximity, limited to icon scale 1–1.22 and 0–4px lift; and RubberSegment's independently clipped thumb edges, reduced to a 260ms non-bouncy controlled scope switch with a 25ms trailing-edge handoff. No AnimatedList, scope dragging/momentum or graph-node choreography. The user's later request explicitly adds decorative backgrounds; the earlier no-background restriction is superseded for the canvas only. Labels and hit areas stay fixed; touch/narrow screens keep the dock static. Native buttons retain keyboard actions.

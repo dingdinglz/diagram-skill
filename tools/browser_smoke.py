@@ -191,10 +191,13 @@ def main():
             wait_for('document.querySelector(".workspace-title h1")?.textContent === "手动连接验收" && document.querySelector(".app-shell").dataset.busy === "false"')
             assert evaluate('document.querySelectorAll(".react-flow__node").length') == 0
             click('添加开始节点')
-            click('编辑节点')
+            wait_for('document.activeElement?.id === "node-label"')
             browser('fill', '#node-label', '用户提交请求')
+            # Clear the selection first; with a card selected, the dock would chain from it.
+            browser('press', 'Escape')
+            browser('press', 'Escape')
             click('添加处理步骤')
-            click('编辑节点')
+            wait_for('document.activeElement?.id === "node-label"')
             browser('fill', '#node-label', '读取参数')
             ids = evaluate('[...document.querySelectorAll(".react-flow__node")].map(e=>e.dataset.id)')
             points = evaluate('(() => { const ids=' + json.dumps(ids) + '; const p=(id,h)=>{const r=document.querySelector(`[data-id="${id}"] [data-handleid="${h}"]`).getBoundingClientRect();return [Math.round(r.x+r.width/2),Math.round(r.y+r.height/2)]};return [p(ids[0],"bottom"),p(ids[1],"top")];})()')

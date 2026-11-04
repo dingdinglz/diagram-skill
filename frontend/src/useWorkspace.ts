@@ -170,6 +170,20 @@ export function useWorkspace() {
     } catch (e) { report(e); return false; }
     finally { setBusy(''); }
   };
+  /** Returns the failure for the import dialog to show; a rejected file is not a workspace error. */
+  const importTask = async (title: string, imported: Graph): Promise<string | null> => {
+    setBusy('正在导入流程…');
+    try {
+      await flush();
+      const next = await api.create(title.trim() || '未命名流程', 'manual', imported);
+      acceptTask(next, true); setRecovery(null); setError(''); await refreshTasks();
+      return null;
+    } catch (e) {
+      if (e instanceof ApiError && e.details.length) return e.details.slice(0, 3).map(d => `${d.path || ''} ${d.message || ''}`.trim()).join('；') + (e.details.length > 3 ? ` 等 ${e.details.length} 处` : '');
+      return e instanceof Error ? e.message : '导入失败。';
+    }
+    finally { setBusy(''); }
+  };
   const perform = async (action: string, extra: Record<string, unknown> = {}) => {
     if (!taskRef.current || busyRef.current) return false;
     if (action === 'approve') {
@@ -226,7 +240,7 @@ export function useWorkspace() {
 
   return { tasks, task, graph, dirty, saving, busy, error, notice, conflict, online, initialized, recovery,
     edit, undo, redo, canUndo: past.current.length > 0, canRedo: future.current.length > 0, beginDrag, endDrag,
-    openTask, createTask, perform, exportPng, exportLocal, reload, recover, discardRecovery,
+    openTask, createTask, importTask, perform, exportPng, exportLocal, reload, recover, discardRecovery,
     flush, report, setError, setNotice, refreshTasks,
     editable: task?.status === 'draft' && !busy && !conflict,
   };

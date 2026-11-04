@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, MiniMap, ViewportPortal, useReactFlow, useViewport, getViewportForBounds, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
-import { ArrowDown, ArrowDownToLine, ArrowRight, Check, CheckCheck, ChevronRight, Clock3, FileJson, GitBranch, History, LayoutGrid, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Trash2, Undo2, X, AlertCircle, Pause, Image, FileText, Search, PanelLeft, Keyboard, Minus, BookOpen, NODE_ICONS, AmbientLight, ArrowUp, GroupSelection, MoveUp, IconContext, UI_ICON_STYLE } from './icons';
+import { ArrowDown, ArrowDownToLine, ArrowRight, Check, CheckCheck, ChevronRight, Clock3, FileJson, GitBranch, History, LayoutGrid, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Trash2, Undo2, X, AlertCircle, Pause, Image, FileText, Search, PanelLeft, Keyboard, Minus, BookOpen, NODE_ICONS, AmbientLight, ArrowUp, GroupSelection, MoveUp, LoopIcon, Reverse, Import, IconContext, UI_ICON_STYLE } from './icons';
 import { BrandMark } from './BrandMark';
 import { LayoutGroup, MotionConfig, motion } from 'motion/react';
 import { ContentTransition, SelectionIndicator, UI_TRANSITION } from './ui/Motion';
@@ -14,6 +14,7 @@ import FlowNode, { LoopArea, type CanvasNode } from './FlowNode';
 import { FlowEdge, type RoutedEdge } from './FlowEdge';
 import { moveItem, groupsOf, upgradeGraph, buildView, NODE_WIDTH, NODE_HEIGHT, type ViewScope } from './views';
 import { createRootScene, createScene, nodePorts } from './geometry';
+import { connectingEdge, createLoop, freeSpot, insertOnEdge, loopRoute, reverseEdge, setRoles, STEP_GAP } from './authoring';
 import { addNodeAtLevel, createEmptySubflow, createGroup, dissolveGroup, groupEndpoint, groupingBlock, groupPath, levelOf, moveIntoGroup, moveToParentLevel } from './groups';
 import { closestOutlinePoint, containsRounded, outlineAnchor, projectAnchor, type Point } from './anchors';
 import { NodeInspector } from './NodeInspector';
@@ -22,7 +23,7 @@ import { GraphInspector } from './GraphInspector';
 import { useWorkspace } from './useWorkspace';
 import { api, downloadArtifact, hasToken } from './api';
 import { approvalIssues, createNode, graphWarnings, layoutGraph, newId, removeNodes, removeEdges, reconnectGraphEdge } from './model';
-import type { HistoricalVersion, NodeKind } from './types';
+import type { FlowRole, Graph, HistoricalVersion, NodeKind } from './types';
 import { GROUP_KIND_LABELS, STATUS_LABELS, VERSION_LABELS } from './types';
 
 const nodeTypes = { start: FlowNode, step: FlowNode, decision: FlowNode, end: FlowNode, 'loop-area': LoopArea };
@@ -62,7 +63,10 @@ function Workspace() {
   const [levelTrail, setLevelTrail] = useState<string[]>([]);
   const [multiIds, setMultiIds] = useState<Set<string>>(() => new Set());
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
-  const [autoEditGroup, setAutoEditGroup] = useState<string | null>(null);
+  const [autoEditId, setAutoEditId] = useState<string | null>(null);
+  const focusEdgeLabel = useRef<string | null>(null);
+  const importInput = useRef<HTMLInputElement>(null);
+  const [importError, setImportError] = useState('');
   const boxSelecting = useRef(false);
   const levelViewports = useRef(new Map<string, { x: number; y: number; zoom: number }>());
   const enterOrigin = useRef<{ x: number; y: number; direction: 'in' | 'out' } | null>(null);
@@ -182,7 +186,7 @@ function Workspace() {
   }, [ws.task?.id, historical?.id, scene.bounds, flow]);
   const view = scene.view;
   const openDetails = useCallback((id: string, scope?: ViewScope) => {
-    setSelectedNodeId(id); setSelectedEdgeId(null); setDetailScope(scope); setPanel('details'); setPanelOpen(true); setMultiIds(new Set());
+    setSelectedNodeId(id); setSelectedEdgeId(null); setDetailScope(scope); setPanel('details'); setPanelOpen(true); setMultiIds(new Set()); setAutoEditId(null);
   }, []);
   // Moving between levels keeps each level's viewport, so returning lands where the reader left.
   const goToLevel = useCallback((next: string | null, selectId: string | null = null, origin?: { x: number; y: number; direction: 'in' | 'out' }) => {
@@ -278,8 +282,11 @@ function Workspace() {
         edgeId = newId('edge');
         ws.edit({ ...graph, edges: [...graph.edges, { id: edgeId, source: source.id, target: target.id, ...(source.anchor ? { sourceAnchor: source.anchor } : {}), ...(target.anchor ? { targetAnchor: target.anchor } : {}), sourceHandle: 'bottom', targetHandle: 'top', label: '', role: 'main' }] });
       }
+      // A decision's exit is not finished until it is labelled, so the condition field takes the focus.
+      if (!drag.edgeId && realEndIsDecision(drag.from.nodeId)) focusEdgeLabel.current = edgeId;
       setSelectedEdgeId(edgeId); setSelectedNodeId(null); setPanel('details'); setPanelOpen(true);
     };
+    const realEndIsDecision = (id: string) => scene.view.nodes.find(n => n.id === id)?.type === 'decision';
     const cancel = () => setConnectionPreview(null);
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') cancel(); };
     window.addEventListener('pointermove', move, { passive: false });
@@ -296,8 +303,8 @@ function Workspace() {
     ...scene.loops.map(loop => ({ id: `loop-area:${loop.id}`, type: 'loop-area' as const,
       position: { x: loop.center.x-loop.radius-48, y: loop.center.y-loop.radius-48 },
       width: 2*(loop.radius+48), height: 2*(loop.radius+48),
-      selectable: false, draggable: false, connectable: false, zIndex: -1,
-      data: { label: loop.label, notes: '', executor: 'program' as const, expanded: false, loopRadius: loop.radius+48, onGroup: () => openDetails(loop.id) } })),
+      selectable: false, draggable: editable, connectable: false, zIndex: -1,
+      data: { label: loop.label, notes: '', executor: 'program' as const, expanded: false, loopRadius: loop.radius+48, onGroup: () => { if (!suppressCanvasClick.current) openDetails(loop.id); } } })),
     ...view.nodes.map(node => ({ ...node, width: NODE_WIDTH, height: NODE_HEIGHT, measured: nodeMeasurements[node.id], selected: node.id === selectedNodeId || multiIds.has(node.id), connectable: editable && !node.reference,
       draggable: !node.reference, selectable: !node.reference,
       data: { ...node.data, groupId: node.groupId, reference: node.reference, dropTarget: node.id === dropTargetId, memberCount: groupsOf(displayGraph).find(g => g.id === node.groupId)?.nodeIds.length, ports: nodePorts(node, scene), branchCount: view.branches[node.id]?.length || 0, exceptionsOnly: view.branches[node.id]?.every(b=>b.exception),
@@ -335,10 +342,14 @@ function Workspace() {
     const removed = changes.filter(c => c.type === 'remove').map(c => c.id);
     if (removed.length) graph = removeNodes(graph, removed);
     changes.forEach(change => {
-      if (change.type === 'position' && change.position) graph = moveItem(graph, change.id, change.position);
+      if (change.type !== 'position' || !change.position) return;
+      if (!change.id.startsWith('loop-area:')) { graph = moveItem(graph, change.id, change.position); return; }
+      // The ring is drawn from its circle, so its card moves by the same distance as its members.
+      const id = change.id.slice('loop-area:'.length), ring = scene.loops.find(l => l.id === id), group = groupsOf(graph).find(g => g.id === id);
+      if (ring && group) graph = moveItem(graph, id, { x: group.position.x + change.position.x - (ring.center.x - ring.radius - 48), y: group.position.y + change.position.y - (ring.center.y - ring.radius - 48) });
     });
     if (graph !== ws.graph) ws.edit(graph, removed.length > 0);
-  }, [editable, ws.graph, ws.edit]);
+  }, [editable, ws.graph, ws.edit, scene.loops]);
   const onEdgesChange = useCallback((changes: EdgeChange[]) => {
     if (!editable) return;
     const removed = changes.filter(c => c.type === 'remove').map(c => c.id);
@@ -353,22 +364,38 @@ function Workspace() {
     ws.edit({ ...ws.graph, edges: [...ws.graph.edges, edge] });
     setSelectedEdgeId(edge.id); setSelectedNodeId(null); setPanel('details'); setPanelOpen(true);
   }, [editable, ws.graph, ws.edit]);
+  // With a card or connection selected, a new node continues the flow from there instead of floating alone.
+  const selectedItem = view.nodes.find(n => n.id === selectedNodeId);
+  const chainSource = selectedItem?.type !== 'end' ? selectedItem : undefined;
+  const selectedGeometry = scene.edges.find(e => e.edge.id === selectedEdgeId);
+  const dockContext = selectedGeometry ? '插入到连线' : chainSource ? `接在 ${chainSource.data.label || '未命名节点'} 后` : '添加节点';
+  const chainFrom = (graph: Graph, node: { id: string }) => {
+    if (!chainSource) return graph;
+    const source = chainSource.groupId ? groupEndpoint(graph, chainSource.groupId, 'exit') : chainSource.id;
+    return source ? { ...graph, edges: [...graph.edges, connectingEdge(graph, source, node.id)] } : graph;
+  };
+  const placement = () => {
+    const box = canvas.current?.getBoundingClientRect();
+    const wanted = chainSource ? { x: chainSource.position.x, y: chainSource.position.y + STEP_GAP } : box ? flow.screenToFlowPosition({ x: box.left + box.width / 2 - 124, y: box.top + box.height / 2 - 50 }) : { x: 80, y: 80 };
+    return freeSpot(view.nodes, wanted);
+  };
   const addNode = (kind: NodeKind) => {
     if (!editable) return;
-    const box = canvas.current?.getBoundingClientRect();
-    const position = selectedNode ? { x: selectedNode.position.x, y: selectedNode.position.y + 180 } : box ? flow.screenToFlowPosition({ x: box.left + box.width / 2 - 124, y: box.top + box.height / 2 - 50 }) : { x: 80, y: 80 };
-    const node = createNode(kind, position);
-    ws.edit(addNodeAtLevel(ws.graph, node, levelId));
-    setSelectedNodeId(node.id); setSelectedEdgeId(null); setPanel('details'); setPanelOpen(true); setMultiIds(new Set());
+    const node = createNode(kind, placement());
+    if (selectedEdge && selectedGeometry) {
+      const rect = (id: string) => scene.rects[id];
+      ws.edit(insertOnEdge(ws.graph, selectedEdge.id, node, levelId, rect(selectedGeometry.edge.source), rect(selectedGeometry.edge.target)));
+    } else ws.edit(chainFrom(addNodeAtLevel(ws.graph, node, levelId), node));
+    setSelectedNodeId(node.id); setSelectedEdgeId(null); setPanel('details'); setPanelOpen(true); setMultiIds(new Set()); setAutoEditId(node.id);
   };
-  // A new group is selected with its name ready to type; naming is the next thing it needs.
-  const selectNewGroup = (groupId: string) => { setAutoEditGroup(groupId); openDetails(groupId); };
+  // A new item is selected with its name ready to type; naming is the next thing it needs.
+  const selectNewGroup = (groupId: string) => { openDetails(groupId); setAutoEditId(groupId); };
   const addSubflow = () => {
     if (!editable) return;
-    const box = canvas.current?.getBoundingClientRect();
-    const position = box ? flow.screenToFlowPosition({ x: box.left + box.width / 2 - 124, y: box.top + box.height / 2 - 50 }) : { x: 80, y: 80 };
-    const created = createEmptySubflow(ws.graph, position, levelId);
-    if (created) { ws.edit(created.graph); selectNewGroup(created.groupId); }
+    const created = createEmptySubflow(ws.graph, placement(), levelId);
+    if (!created) return;
+    const inner = groupsOf(created.graph).find(g => g.id === created.groupId)!.nodeIds[0];
+    ws.edit(chainFrom(created.graph, { id: inner })); selectNewGroup(created.groupId);
   };
   const groupItems = (ids: string[]) => {
     if (!editable) return;
@@ -388,6 +415,26 @@ function Workspace() {
   };
   const multiSelected = multiIds.size > 1 ? [...multiIds] : [];
   const selectionBlock = multiSelected.length ? groupingBlock(ws.graph, multiSelected) : null;
+  const selectionRoute = multiSelected.length ? loopRoute(ws.graph, multiSelected) : null;
+  const makeLoop = () => {
+    const created = editable && createLoop(ws.graph, multiSelected, levelId);
+    if (created) { ws.edit(created.graph); selectNewGroup(created.groupId); }
+  };
+  const importGraph = async (file?: File) => {
+    if (!file) return;
+    setImportError('');
+    try {
+      if (file.size > 2 * 1024 * 1024) throw new Error('文件超过 2 MB，无法导入。');
+      const graph = JSON.parse(await file.text()) as Graph;
+      if (!graph || typeof graph !== 'object' || !Array.isArray(graph.nodes)) throw new Error('这不是流程 JSON：缺少 nodes 列表。');
+      const failure = await ws.importTask(newTitle.trim() || graph.title || file.name.replace(/\.json$/i, ''), graph);
+      if (failure) setImportError(`文件没有通过校验：${failure}`); else setDialog(null);
+    } catch (e) { setImportError(e instanceof SyntaxError ? '文件不是有效的 JSON。' : e instanceof Error ? e.message : '导入失败。'); }
+    finally { if (importInput.current) importInput.current.value = ''; }
+  };
+  useEffect(() => {
+    if (selectedEdgeId && focusEdgeLabel.current === selectedEdgeId) { focusEdgeLabel.current = null; document.getElementById('edge-label')?.focus(); }
+  }, [selectedEdgeId]);
   const deleteSelection = () => {
     if (!editable) return;
     if (multiIds.size > 1) {
@@ -409,7 +456,7 @@ function Workspace() {
     const onKey = (event: KeyboardEvent) => {
       if (dialog) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSidebarOpen(true); searchRef.current?.focus(); return; }
-      if ((event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return;
+      if ((event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) { if (event.key === 'Escape') (event.target as HTMLElement).blur(); return; }
       if (event.key === 'Escape') {
         if (levelId && !selectedNodeId && !selectedEdgeId && !multiIds.size && !connectionDrag) { leaveLevel(); return; }
         setSidebarOpen(false); if (narrow) setPanelOpen(false); setSelectedEdgeId(null); setSelectedNodeId(null); setMultiIds(new Set()); return;
@@ -468,7 +515,7 @@ function Workspace() {
     <aside ref={sidebarRef} className="sidebar" aria-label="工作区导航" role={sidebarOpen && narrow ? 'dialog' : undefined} aria-modal={sidebarOpen && narrow ? true : undefined} inert={narrow && !sidebarOpen}>
       <div className="brand-row"><a className="brand" href="#" onClick={event => event.preventDefault()} aria-label="Flowplan"><span className="brand-mark"><BrandMark /></span><span>Flowplan</span></a><button className="icon-button mobile-only" aria-label="收起任务导航" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
       <label className="task-search"><Search size={15} /><input ref={searchRef} aria-label="搜索流程" placeholder="搜索流程…" value={taskSearch} onChange={event => setTaskSearch(event.target.value)} /><kbd>⌘ K</kbd></label>
-      <button className="new-task-button" onClick={() => { setNewTitle(''); setSidebarOpen(false); setDialog('new'); }} disabled={!!ws.busy || ws.conflict}><Plus size={16} />新建流程</button>
+      <button className="new-task-button" onClick={() => { setNewTitle(''); setImportError(''); setSidebarOpen(false); setDialog('new'); }} disabled={!!ws.busy || ws.conflict}><Plus size={16} />新建流程</button>
       <div className="sidebar-section-label"><span>流程</span><span className="task-count">{ws.tasks.length}</span></div>
       <nav className="task-list" aria-label="任务列表">
         {filteredTasks.map(task => <button key={task.id} className={`task-item ${ws.task?.id === task.id ? 'active' : ''}`} aria-current={ws.task?.id === task.id ? 'page' : undefined} title={`${task.title || '未命名流程'} · ${STATUS_LABELS[task.status]} · ${time(task.updatedAt)}`} onClick={() => { setSidebarOpen(false); void ws.openTask(task.id); }} disabled={!!ws.busy || ws.conflict}>
@@ -530,14 +577,15 @@ function Workspace() {
               }
               openDetails(node.id);
             }}
-            onNodeDoubleClick={(_, node) => { if (node.data.groupId) enterGroup(node.data.groupId); else if (node.type !== 'loop-area' && !node.data.reference) openDetails(node.id); }}
+            onNodeDoubleClick={(_, node) => { if (node.data.groupId) enterGroup(node.data.groupId); else if (node.type !== 'loop-area' && !node.data.reference) { openDetails(node.id); if (editable) setAutoEditId(node.id); } }}
             onEdgeClick={(_, edge) => { setSelectedEdgeId(edge.id); setSelectedNodeId(null); setPanel('details'); setPanelOpen(true); }}
             onPaneClick={() => { if (!suppressCanvasClick.current) { setSelectedNodeId(null); setSelectedEdgeId(null); setMultiIds(new Set()); } }}
             onNodeDragStart={ws.beginDrag}
             onNodeDrag={(event, _, dragged) => setDropTargetId(groupAtPointer(event, dragged.map(n => n.id)))}
             onNodeDragStop={(event, _, dragged) => {
-              const ids = dragged.map(n => n.id), target = groupAtPointer(event, ids);
+              const ids = dragged.map(n => n.id), target = ids.some(id => id.startsWith('loop-area:')) ? null : groupAtPointer(event, ids);
               setDropTargetId(null);
+              if (ids.some(id => id.startsWith('loop-area:'))) { suppressCanvasClick.current = true; window.setTimeout(() => { suppressCanvasClick.current = false; }, 0); }
               // Applied before endDrag, so the move and the join undo as one step.
               if (target && editable && !groupingBlock(ws.graph, ids)) { ws.edit(moveIntoGroup(ws.graph, ids, target), false); setSelectedNodeId(null); setMultiIds(new Set()); }
               ws.endDrag();
@@ -580,12 +628,14 @@ function Workspace() {
           </nav>}
           {!!displayGraph.nodes.length && <div className="canvas-legend">{levelId ? <span>本层 <strong>{view.nodes.filter(n => !n.reference).length}</strong> 项</span> : <><span><strong>{displayGraph.nodes.length}</strong> 个节点</span><span className="legend-separator" aria-hidden="true" /><span><strong>{displayGraph.edges.length}</strong> 条连线</span></>}</div>}
           {!!displayGraph.nodes.length && <div className="canvas-zoom" role="group" aria-label="画布缩放"><button aria-label="放大画布" title="放大" onClick={() => zoomCanvas('in')} disabled={zoom >= 1.7}><Plus size={16} /></button><button className="zoom-value" aria-label={`当前缩放 ${Math.round(zoom * 100)}%，点击以 100% 阅读`} onClick={readCanvas}>{Math.round(zoom * 100)}%</button><button aria-label="缩小画布" title="缩小" onClick={() => zoomCanvas('out')} disabled={zoom <= .15}><Minus size={16} /></button><button aria-label="查看流程全貌" title="查看全貌" onClick={() => fitCanvas(250)}><Maximize size={15} /></button></div>}
-          {!!ws.task && !multiSelected.length && <NodeDock disabled={!editable} onAdd={type => type === 'group' ? addSubflow() : addNode(type)} />}
+          {!!ws.task && !multiSelected.length && <NodeDock disabled={!editable} context={dockContext} onAdd={type => type === 'group' ? addSubflow() : addNode(type)} />}
           {!!multiSelected.length && <div className="selection-bar" role="toolbar" aria-label="多选操作">
-            <span className="selection-count">已选 <strong>{multiSelected.length}</strong> 项</span>
+            <span className="selection-count"><span>已选 </span><strong>{multiSelected.length}</strong> 项</span>
             {editable && <>
               <button className="button primary" disabled={!!selectionBlock} title={selectionBlock || '⌘/Ctrl G'} onClick={() => groupItems(multiSelected)}><GroupSelection size={16} />组成子流程</button>
+              <button className="button secondary" disabled={!selectionRoute} title={!selectionRoute ? '所选步骤连成一条线后才能组成循环' : selectionRoute.closing ? '会新增一条回到起点的连线' : '按现有连线组成循环'} onClick={makeLoop}><LoopIcon size={16} />{selectionRoute?.closing ? '补回边成环' : '组成循环'}</button>
               {!!levelId && <button className="button secondary" onClick={() => { ws.edit(moveToParentLevel(ws.graph, multiSelected, levelId)); setMultiIds(new Set()); }}><MoveUp size={16} />移到上一层</button>}
+              <select className="selection-role" aria-label="批量设置显示分类" value="" onChange={event => { if (event.target.value) ws.edit(setRoles(ws.graph, multiSelected, event.target.value as FlowRole)); }}><option value="">分类…</option><option value="main">主线</option><option value="support">次要</option><option value="exception">异常</option></select>
               <button className="icon-button danger" aria-label="删除所选" title="删除所选" onClick={deleteSelection}><Trash2 size={18} /></button>
             </>}
             <button className="icon-button" aria-label="取消选择" title="取消选择 Esc" onClick={() => setMultiIds(new Set())}><X size={18} /></button>
@@ -607,8 +657,8 @@ function Workspace() {
               {!ws.task?.versions.length && <div className="history-empty"><History size={24} /><h3>还没有历史版本</h3><p>存档当前流程，保留一个可以随时回看的版本。</p></div>}
               {historical && <section className="history-actions"><h3>这个版本的文件</h3><div className="artifact-buttons"><button onClick={() => void downloadVersion('diagram.json')}><FileJson size={15} />JSON</button><button onClick={() => void downloadVersion('diagram.md')}><FileText size={15} />文字</button><button disabled={!historical.hasPng} onClick={() => void downloadVersion('diagram.png')}><Image size={15} />PNG</button></div>{!historical.hasPng && <p className="field-hint">此版本尚未经过浏览器提交，因此没有 PNG。</p>}<button className="button secondary full-width" disabled={!!ws.busy} onClick={() => void restoreVersion(historical.id)}><RotateCcw size={14} />恢复为新草稿</button><p className="field-hint">恢复不会修改历史，也不会自动暂停已开始的实现。</p></section>}
             </> : !multiSelected.length && selectedNodeId && (selectedNode || groupsOf(displayGraph).some(g => g.id === selectedNodeId)) ? <NodeInspector
-              key={`${ws.task?.id}:${historical?.id}:${selectedNodeId}:${JSON.stringify(detailScope)}`} graph={displayGraph} selectedId={selectedNodeId}
-              initialScope={detailScope} levelId={levelId} autoEdit={autoEditGroup === selectedNodeId} editable={editable} onEdit={ws.edit} onDelete={deleteSelection}
+              key={`${ws.task?.id}:${historical?.id}:${selectedNodeId}:${JSON.stringify(detailScope)}:${autoEditId === selectedNodeId}`} graph={displayGraph} selectedId={selectedNodeId}
+              initialScope={detailScope} levelId={levelId} autoEdit={autoEditId === selectedNodeId} editable={editable} onEdit={ws.edit} onDelete={deleteSelection}
               onEnter={enterGroup} onUp={leaveLevel} onReveal={revealItem} onDissolve={dissolve} onGroupNode={id => groupItems([id])} />
             : !selectedEdge && levelId ? <NodeInspector
               key={`${ws.task?.id}:${historical?.id}:level:${levelId}`} graph={displayGraph} selectedId={levelId}
@@ -622,6 +672,7 @@ function Workspace() {
               <label className="field-label" htmlFor="edge-role">显示分类</label><select id="edge-role" disabled={!editable} value={selectedEdge.role || 'main'} onChange={event => { const graph = upgradeGraph(ws.graph); ws.edit({ ...graph, edges: graph.edges.map(e => e.id === selectedEdge.id ? { ...e, role: event.target.value as 'main' | 'support' | 'exception' } : e) }); }}><option value="main">主线 · 粗实线</option><option value="support">次要分支 · 细实线</option><option value="exception">异常分支 · 细虚线</option></select>
               <p className="field-hint">主循环上的主线会进一步加粗，便于顺着箭头阅读。</p>
               <p className="field-hint">拖动连线两端，可沿卡片边缘调整位置，或接到其他卡片。</p>
+              <button className="button subtle" disabled={!editable} onClick={() => ws.edit(reverseEdge(ws.graph, selectedEdge.id))}><Reverse size={14} />反转方向</button>
               {(selectedEdge.sourceAnchor || selectedEdge.targetAnchor) && <button className="button subtle" disabled={!editable} onClick={() => ws.edit({ ...ws.graph, edges: ws.graph.edges.map(edge => { if (edge.id !== selectedEdge.id) return edge; const { sourceAnchor: _source, targetAnchor: _target, ...automatic } = edge; return automatic; }) })}>自动选择连接点</button>}
               <div className="inspector-callout"><GitBranch size={17} /><p>条件判断的每条出口都需要标签，避免人和 agent 对同一条线理解不同。</p></div>
               <div className="node-identity">连线 ID <code>{selectedEdge.id}</code></div>
@@ -654,7 +705,7 @@ function Workspace() {
       : dialog === 'approve' ? <button className="button primary full-width" disabled={!!issues.length || !!ws.busy} onClick={() => void ws.perform('approve').then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <Check size={16} />}确认并开始实现</button>
       : dialog === 'cancel' ? <button className="button primary full-width" disabled={!!ws.busy} onClick={() => void ws.perform('cancel').then(ok => { if (ok) setDialog(null); })}>保留草稿并暂停</button> : undefined
     }>
-      {dialog === 'shortcuts' ? <><h2 id="dialog-title">快捷键</h2><dl className="shortcut-list"><div><dt>搜索流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>K</kbd></dd></div><div><dt>撤销</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Z</kbd></dd></div><div><dt>重做</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Shift</kbd><kbd>Z</kbd></dd></div><div><dt>存档当前版本</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>S</kbd></dd></div><div><dt>删除选中节点或连线</dt><dd><kbd>Delete</kbd></dd></div><div><dt>多选节点</dt><dd><kbd>Shift</kbd><kbd>点击 / 拖选</kbd></dd></div><div><dt>把所选组成子流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>G</kbd></dd></div><div><dt>解散选中的子流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Shift</kbd><kbd>G</kbd></dd></div><div><dt>进入选中的子流程</dt><dd><kbd>Enter</kbd></dd></div><div><dt>退出选择 / 返回上一层 / 关闭弹窗</dt><dd><kbd>Esc</kbd></dd></div></dl><div className="modal-tip"><MousePointer2 size={17} /><span>拖动卡片边缘即可创建连线；选中连线后拖动端点可重新连接。把节点拖到子流程卡片上即可移入，双击卡片进入。滚动画布平移，双指缩放调整视野。</span></div></> : dialog === 'new' ? <><span className="modal-icon"><Plus size={22} /></span><h2 id="dialog-title">新建流程</h2><label className="field-label" htmlFor="new-title">任务名称</label><input id="new-title" autoFocus value={newTitle} maxLength={200} placeholder="例如：消息处理与失败重试" onChange={event => setNewTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newTitle.trim() && !ws.busy) void ws.createTask(newTitle).then(ok => { if (ok) setDialog(null); }); }} /><div className="modal-tip"><Sparkles size={16} /><span>生成初稿：在 coding agent 中调用 diagram-plan skill。</span></div></> : dialog === 'feedback' ? <><span className="modal-icon"><MessageSquare size={22} /></span><h2 id="dialog-title">告诉 agent 要改哪里</h2><p>当前图、完整说明和 PNG 会一并交给 agent。提交后暂时只读，避免双方同时修改。</p><label className="field-label" htmlFor="feedback">修改要求</label><textarea id="feedback" autoFocus rows={6} value={feedback} placeholder="例如：在校验失败后增加一次重试；保持现在的主线与布局。" onChange={event => setFeedback(event.target.value)} disabled={!!ws.busy} /></> : dialog === 'approve' ? <><span className="modal-icon"><ShieldCheck size={24} /></span><h2 id="dialog-title">确认并开始实现？</h2><p>确认后将授权 agent 按当前流程实现，并冻结此版本。后续修改需创建修订。</p><div className="approval-summary"><strong>{displayGraph.title}</strong><span>{displayGraph.nodes.length} 个节点 · {displayGraph.edges.length} 条连线 · {displayGraph.nodes.filter(n => n.data.notes).length} 张说明卡片</span></div>{!!issues.length && <div className="approval-issues">{issues.map((issue, i) => <p key={i}><AlertCircle size={14} />{issue}</p>)}</div>}<p className="field-hint">这是对 agent 的实施授权；不是宿主工具权限级别的强制拦截。</p></> : <><span className="modal-icon"><Pause size={22} /></span><h2 id="dialog-title">暂停这次规划？</h2><p>当前草稿和历史都会保留。agent 会收到取消状态，不应开始实现。你可以随时回来继续编辑。</p></>}
+      {dialog === 'shortcuts' ? <><h2 id="dialog-title">快捷键</h2><dl className="shortcut-list"><div><dt>搜索流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>K</kbd></dd></div><div><dt>撤销</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Z</kbd></dd></div><div><dt>重做</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Shift</kbd><kbd>Z</kbd></dd></div><div><dt>存档当前版本</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>S</kbd></dd></div><div><dt>删除选中节点或连线</dt><dd><kbd>Delete</kbd></dd></div><div><dt>新节点接在选中项后</dt><dd>选中后点底部添加</dd></div><div><dt>编辑节点文字</dt><dd>双击卡片</dd></div><div><dt>多选节点</dt><dd><kbd>Shift</kbd><kbd>点击 / 拖选</kbd></dd></div><div><dt>把所选组成子流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>G</kbd></dd></div><div><dt>解散选中的子流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Shift</kbd><kbd>G</kbd></dd></div><div><dt>进入选中的子流程</dt><dd><kbd>Enter</kbd></dd></div><div><dt>退出选择 / 返回上一层 / 关闭弹窗</dt><dd><kbd>Esc</kbd></dd></div></dl><div className="modal-tip"><MousePointer2 size={17} /><span>拖动卡片边缘即可创建连线；选中连线后拖动端点可重新连接。把节点拖到子流程卡片上即可移入，双击卡片进入。滚动画布平移，双指缩放调整视野。</span></div></> : dialog === 'new' ? <><span className="modal-icon"><Plus size={22} /></span><h2 id="dialog-title">新建流程</h2><label className="field-label" htmlFor="new-title">任务名称</label><input id="new-title" autoFocus value={newTitle} maxLength={200} placeholder="例如：消息处理与失败重试" onChange={event => setNewTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newTitle.trim() && !ws.busy) void ws.createTask(newTitle).then(ok => { if (ok) setDialog(null); }); }} /><div className="modal-tip"><Sparkles size={16} /><span>生成初稿：在 coding agent 中调用 diagram-plan skill。</span></div><input ref={importInput} id="import-file" className="visually-hidden" type="file" accept=".json,application/json" tabIndex={-1} aria-label="选择流程 JSON 文件" onChange={event => void importGraph(event.target.files?.[0])} /><button className="button secondary full-width import-button" disabled={!!ws.busy} onClick={() => importInput.current?.click()}><Import size={16} />导入流程 JSON</button>{importError && <p className="import-error" role="alert">{importError}</p>}</> : dialog === 'feedback' ? <><span className="modal-icon"><MessageSquare size={22} /></span><h2 id="dialog-title">告诉 agent 要改哪里</h2><p>当前图、完整说明和 PNG 会一并交给 agent。提交后暂时只读，避免双方同时修改。</p><label className="field-label" htmlFor="feedback">修改要求</label><textarea id="feedback" autoFocus rows={6} value={feedback} placeholder="例如：在校验失败后增加一次重试；保持现在的主线与布局。" onChange={event => setFeedback(event.target.value)} disabled={!!ws.busy} /></> : dialog === 'approve' ? <><span className="modal-icon"><ShieldCheck size={24} /></span><h2 id="dialog-title">确认并开始实现？</h2><p>确认后将授权 agent 按当前流程实现，并冻结此版本。后续修改需创建修订。</p><div className="approval-summary"><strong>{displayGraph.title}</strong><span>{displayGraph.nodes.length} 个节点 · {displayGraph.edges.length} 条连线 · {displayGraph.nodes.filter(n => n.data.notes).length} 张说明卡片</span></div>{!!issues.length && <div className="approval-issues">{issues.map((issue, i) => <p key={i}><AlertCircle size={14} />{issue}</p>)}</div>}<p className="field-hint">这是对 agent 的实施授权；不是宿主工具权限级别的强制拦截。</p></> : <><span className="modal-icon"><Pause size={22} /></span><h2 id="dialog-title">暂停这次规划？</h2><p>当前草稿和历史都会保留。agent 会收到取消状态，不应开始实现。你可以随时回来继续编辑。</p></>}
       {!!ws.busy && <p className="modal-progress" role="status">{ws.busy}</p>}
       {!!ws.error && <p className="modal-error" role="alert">{ws.error}</p>}
     </Dialog>}

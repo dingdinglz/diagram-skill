@@ -12,7 +12,8 @@ export const initialTaskId = params.get('task');
 export const hasToken = () => !!sessionStorage.getItem(key);
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) { super(message); this.status = status; }
+  details: { path?: string; message?: string }[];
+  constructor(status: number, message: string, details: unknown = []) { super(message); this.status = status; this.details = Array.isArray(details) ? details : []; }
 }
 async function request<T>(path: string, method = 'GET', body?: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
@@ -23,7 +24,7 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({ error: `请求失败 (${response.status})` }));
-    throw new ApiError(response.status, data.error || '请求失败');
+    throw new ApiError(response.status, data.error || '请求失败', data.details);
   }
   return response.json() as Promise<T>;
 }
