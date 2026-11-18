@@ -24,6 +24,12 @@ npx skills add dingdinglz/diagram-skill --skill diagram-plan
 
 编辑器目前是中文界面，图里的标题和说明可以使用其他语言。
 
+## 第一次给整个项目画图
+
+在项目目录打开 agent，输入 `/diagram-plan all`（Pi 中是 `/skill:diagram-plan all`），或直接说「用 diagram-plan 画出这个项目的全部核心流程」。不用先建任务或选模式。
+
+Agent 会从实际入口追踪代码，每条独立的核心流程生成一张可编辑的图，在同一个画板的侧栏切换。它会列出图名和未能核实的部分。这条命令只记录现状，不改项目源码。
+
 ## 怎么用
 
 1. 从空白画布开始，或者让 agent 阅读相关代码后生成初稿。

@@ -24,6 +24,12 @@ You need macOS or Linux, Python 3.8+, and a local desktop browser. The editor co
 
 The editor UI is currently in Chinese. You can write the diagram and its notes in your preferred language.
 
+## Map an entire project on first use
+
+In your agent, run `/diagram-plan all` (in Pi, `/skill:diagram-plan all`), or ask: “Use diagram-plan to draw all core workflows in this project.” No existing task or setup in the project is needed once the skill is installed.
+
+The agent traces the project's entry points and creates one editable diagram per distinct core workflow. Switch between them in one workspace sidebar. The agent lists the diagrams and any gaps it couldn't verify. This mode documents existing behavior without changing project code.
+
 ## How it works
 
 1. Start with a blank canvas, or let the agent read the relevant code and propose a flow.

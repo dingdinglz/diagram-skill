@@ -1,7 +1,8 @@
 ---
 name: diagram-plan
 license: MIT
-description: Visually plan a task's core behavior in an editable local browser flow before coding. Use only when the user explicitly invokes diagram-plan or asks to use this skill to draw, review, revise, and approve a plan before implementation.
+description: Draw editable local flowcharts for a coding task, or map an existing project's core workflows with /diagram-plan all. Use only when explicitly requested.
+argument-hint: "[all]"
 disable-model-invocation: true
 compatibility: macOS or Linux, Python 3.8+, and a local modern desktop browser. POSIX file locking is required; native Windows is not supported. Bundled web assets require no Node.js, MCP server, network service, or API key at runtime.
 ---
@@ -17,7 +18,8 @@ This is an explicitly invoked planning workflow. Do not silently start it for ev
 - Resolve `SKILL_DIR` to the absolute parent directory of this loaded `SKILL.md`. Resolve scripts and references relative to it, regardless of the shell's working directory.
 - Resolve `PROJECT` to the user's actual target workspace. Ask if it is ambiguous. Always pass `--project "$PROJECT"`; never substitute the skill installation directory simply because the script lives there.
 - Read [references/cli.md](references/cli.md) before running commands. Runtime is Python standard library plus the prebuilt `web/` directory. Do not install Node dependencies, set up MCP, or request model credentials to use the skill.
-- Ask whether the user wants **manual** drawing or an **agent-generated** first draft, unless already specified.
+- If invoked with the standalone argument `all` (e.g. `/diagram-plan all`), follow [references/project-flows.md](references/project-flows.md) instead of the single-task workflow below. This selects agent-generated diagrams of the current project; skip the mode question. An explicit request to use diagram-plan to map all project flows means the same thing.
+- Otherwise ask whether the user wants **manual** drawing or an **agent-generated** first draft, unless already specified.
 
 Shell examples use these resolved absolute paths, not literal placeholders:
 
