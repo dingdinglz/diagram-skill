@@ -11,6 +11,7 @@
     "test:web": "vitest run",
     "test:python": "python3 -m unittest discover -s tests -v",
     "test:browser": "python3 tools/browser_smoke.py",
+    "test:library": "python3 tools/library_smoke.py",
     "test:connections": "python3 tools/connection_smoke.py",
     "test:ui": "python3 tools/ui_smoke.py",
     "test:release": "python3 tools/smoke_release.py",

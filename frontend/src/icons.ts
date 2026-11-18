@@ -19,7 +19,7 @@ export {
   Plus, ArrowBendUpRight as Redo2, ArrowCounterClockwise as RotateCcw,
   FloppyDisk as Save, ShieldCheck, Cpu as Sparkles, Trash as Trash2,
   ArrowBendUpLeft as Undo2, X, WarningCircle as AlertCircle, Pause,
-  LockKey as LockKeyhole, Image, FileText, FolderOpen,
+  LockKey as LockKeyhole, Image, FileText, FolderOpen, Folder, FolderPlus, DotsSixVertical as Grip,
   MagnifyingGlass as Search, SidebarSimple as PanelLeft, Command as Keyboard,
   FlowArrow as Workflow, Desktop as Monitor, SlidersHorizontal, Minus,
   ArrowsDownUp as Reverse, ArrowsClockwise as LoopIcon, UploadSimple as Import, Eye as Preview,

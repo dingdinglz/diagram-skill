@@ -52,6 +52,24 @@ python3 "$SCRIPT" stop --project "$PROJECT"
 
 There is **no `open` subcommand**. `start` opens the project's task list; select an existing task there. `create` opens the newly created task. With `--no-open`, open the exact returned URL manually. There are also no CLI `approve`, `submit`, `resume`, `cancel`, or `restore` subcommands in this protocol: use the browser actions, including its real PNG rendering for submit/approve/checkpoint.
 
+## Organize the library
+
+`library` returns `tasks` (summaries) and `entries` (tasks and folders). To list a folder's children in order, filter `entries` by `parentId` without sorting. At the root, `parentId` is `null`. A folder entry has a `name`; look up a task's title in `tasks` by ID. `list` still returns only the flat task summary array.
+
+```sh
+python3 "$SCRIPT" library --project "$PROJECT"
+python3 "$SCRIPT" folder-create --project "$PROJECT" --name "Release plans"
+# Set FOLDER_ID to the id returned above. Use --parent to nest a folder or task.
+python3 "$SCRIPT" folder-create --project "$PROJECT" --name "Archive" --parent "$FOLDER_ID" --index 0
+python3 "$SCRIPT" create --project "$PROJECT" --title "Deploy" --parent "$FOLDER_ID"
+# Set TASK_ID to task.id from create. Move the task ahead of Archive.
+python3 "$SCRIPT" move --project "$PROJECT" --id "$TASK_ID" --parent "$FOLDER_ID" --index 0
+# Move it back to the end of the root list.
+python3 "$SCRIPT" move --project "$PROJECT" --id "$TASK_ID"
+```
+
+`move` takes a task or folder ID. For `move` and `folder-create`, omit `--parent` for the root, and omit `--index` to append. Indexes start at zero and count tasks and folders together in the destination; for a move, count after removing the entry from its old position. Both commands return the affected entry. Organizing the library does not revise the graph or change approval.
+
 ## Results and recovery
 
 - `start` prints JSON containing the session URL. `create` prints the task and a task-specific URL. URLs have fragment credentials; do not tee their output into project logs, attach it to issues, or put it into snapshots. Share only with the local user who is opening the editor.

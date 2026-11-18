@@ -86,6 +86,28 @@ python3 "$SCRIPT" stop --project "$PROJECT"
 
 Closing a tab saves no approval and cancels no task. Reopen the workspace with `start` when you need it again.
 
+## Organize plans in folders
+
+In the sidebar, use the folder-plus button next to **新建流程**. Open a folder to create another folder or a plan inside it. Drag a row (on touchscreens, use its grip) to the insertion line to reorder. Drop on the center of a folder to file it inside, or on **移到上一级** to move it out. Clicking or keyboard-activating the grip instead reveals compact move controls, including in search results. Search includes every level. If the project server was already running when you updated the skill, stop it and run `start` again to load the new routes.
+
+Run `library` to see the project's folders and tasks, or `list` if you only need a flat list of tasks. To create a folder and file a new plan in it:
+
+```sh
+python3 "$SCRIPT" folder-create --project "$PROJECT" --name "Release plans"
+# Set FOLDER_ID to the id printed by folder-create.
+python3 "$SCRIPT" create --project "$PROJECT" --title "Deploy" --parent "$FOLDER_ID"
+python3 "$SCRIPT" library --project "$PROJECT"
+```
+
+To file an existing plan instead, use its task ID. This example puts it first in the folder, then shows how to return it to the root:
+
+```sh
+python3 "$SCRIPT" move --project "$PROJECT" --id "$TASK_ID" --parent "$FOLDER_ID" --index 0
+python3 "$SCRIPT" move --project "$PROJECT" --id "$TASK_ID"
+```
+
+Folders can be nested: pass `--parent "$FOLDER_ID"` to `folder-create`, or use a folder's ID with `move --id`. Omit `--index` to append. The order counts tasks and folders together. Moving a plan keeps its ID and version history.
+
 ## If the agent doesn't continue
 
 Browser events cannot reliably wake an agent whose turn has ended. After submitting feedback or approving, return to the conversation and say:

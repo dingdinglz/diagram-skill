@@ -4,6 +4,8 @@ import { ArrowDown, ArrowDownToLine, ArrowRight, Check, CheckCheck, ChevronRight
 import { BrandMark } from './BrandMark';
 import { TaskSidebar } from './TaskSidebar';
 import { InspectorPanel } from './InspectorPanel';
+import { LibraryNav } from './LibraryNav';
+import { libraryIndex } from './library';
 import { LayoutGroup, MotionConfig, motion } from 'motion/react';
 import { ContentTransition, SelectionIndicator, UI_TRANSITION } from './ui/Motion';
 import { NodeDock } from './ui/reactbits/NodeDock';
@@ -58,6 +60,16 @@ function Workspace() {
     try { localStorage.setItem('flowplan:sidebar-collapsed', String(sidebarCollapsed)); } catch { /* Optional preference. */ }
   }, [sidebarCollapsed]);
   const [taskSearch, setTaskSearch] = useState('');
+  const index = useMemo(() => libraryIndex(ws.library), [ws.library]);
+  const [folderId, setFolderId] = useState<string | null>(null);
+  const revealedTask = useRef<string | undefined>(undefined);
+  const activeParent = ws.task && index.byId.get(ws.task.id)?.parentId;
+  useEffect(() => {
+    if (ws.task && activeParent !== undefined && revealedTask.current !== ws.task.id) {
+      revealedTask.current = ws.task.id; setFolderId(activeParent);
+    }
+  }, [ws.task?.id, activeParent]);
+  const browse = (id: string | null) => { setFolderId(id); setTaskSearch(''); };
   const searchRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
   const [narrow, setNarrow] = useState(() => window.innerWidth <= 760);
@@ -128,9 +140,11 @@ function Workspace() {
     const previous = document.activeElement as HTMLElement | null;
     searchRef.current?.focus();
     const trap = (event: KeyboardEvent) => {
+      if ((event.target as HTMLElement).closest('.modal')) return;
+      if (event.key === 'Escape' && ((event.target as HTMLElement).closest('[data-library-inline]') || sidebarRef.current?.querySelector('[data-library-dragging="true"]'))) return;
       if (event.key === 'Escape') { event.stopImmediatePropagation(); setSidebarOpen(false); }
       if (event.key !== 'Tab') return;
-      const items = [...(sidebarRef.current?.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input') || [])];
+      const items = [...(sidebarRef.current?.querySelectorAll<HTMLElement>('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled)') || [])];
       const first = items[0], last = items[items.length - 1];
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
       if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
@@ -464,7 +478,7 @@ function Workspace() {
       if (file.size > 2 * 1024 * 1024) throw new Error('文件超过 2 MB，无法导入。');
       const graph = JSON.parse(await file.text()) as Graph;
       if (!graph || typeof graph !== 'object' || !Array.isArray(graph.nodes)) throw new Error('这不是流程 JSON：缺少 nodes 列表。');
-      const failure = await ws.importTask(newTitle.trim() || graph.title || file.name.replace(/\.json$/i, ''), graph);
+      const failure = await ws.importTask(newTitle.trim() || graph.title || file.name.replace(/\.json$/i, ''), graph, folderId);
       if (failure) setImportError(`文件没有通过校验：${failure}`); else setDialog(null);
     } catch (e) { setImportError(e instanceof SyntaxError ? '文件不是有效的 JSON。' : e instanceof Error ? e.message : '导入失败。'); }
     finally { if (importInput.current) importInput.current.value = ''; }
@@ -546,7 +560,6 @@ function Workspace() {
   };
   const restoreVersion = async (id: string) => { if (await ws.perform('restore', { versionId: id })) { setHistorical(null); setPanel('details'); } };
 
-  const filteredTasks = ws.tasks.filter(task => (task.title || '未命名流程').toLocaleLowerCase().includes(taskSearch.trim().toLocaleLowerCase()));
 
   const navToggleLabel = narrow ? '打开任务导航' : sidebarCollapsed ? '展开任务导航' : '收起任务导航';
   const ambientControl = <button type="button" className={`icon-button ambient-toggle ${!displayGraph.nodes.length ? 'ambient-toggle-empty' : ''}`}
@@ -559,17 +572,10 @@ function Workspace() {
     {sidebarOpen && narrow && <button className="sidebar-backdrop" aria-label="关闭任务导航" onClick={() => setSidebarOpen(false)} />}
     <TaskSidebar ref={sidebarRef} id="task-navigation" narrow={narrow} collapsed={sidebarCollapsed} aria-label="工作区导航" role={sidebarOpen && narrow ? 'dialog' : undefined} aria-modal={sidebarOpen && narrow ? true : undefined} inert={narrow && !sidebarOpen}>
       <div className="brand-row"><a className="brand" href="#" onClick={event => event.preventDefault()} aria-label="Flowplan"><span className="brand-mark"><BrandMark /></span><span>Flowplan</span></a>{narrow && <button className="icon-button mobile-only" aria-label="收起任务导航" onClick={() => setSidebarOpen(false)}><X size={18} /></button>}</div>
-      <label className="task-search"><Search size={15} /><input ref={searchRef} aria-label="搜索流程" placeholder="搜索流程…" value={taskSearch} onChange={event => setTaskSearch(event.target.value)} /><kbd>⌘ K</kbd></label>
-      <button className="new-task-button" onClick={() => { setNewTitle(''); setImportError(''); setSidebarOpen(false); setDialog('new'); }} disabled={!!ws.busy || ws.conflict}><Plus size={16} />新建流程</button>
-      <div className="sidebar-section-label"><span>流程</span><span className="task-count">{ws.tasks.length}</span></div>
-      <nav className="task-list" aria-label="任务列表">
-        {filteredTasks.map(task => <button key={task.id} className={`task-item ${ws.task?.id === task.id ? 'active' : ''}`} aria-current={ws.task?.id === task.id ? 'page' : undefined} title={`${task.title || '未命名流程'} · ${STATUS_LABELS[task.status]} · ${time(task.updatedAt)}`} onClick={() => { setSidebarOpen(false); void ws.openTask(task.id); }} disabled={!!ws.busy || ws.conflict}>
-          {ws.task?.id === task.id && <SelectionIndicator id="task-selection" className="task-selection" />}
-          <FileText size={18} className="task-icon" /><span className="task-item-text">{task.title || '未命名流程'}{task.status !== 'draft' && <small><span className={`task-dot status-${task.status}`} />{STATUS_LABELS[task.status]}</small>}</span>
-        </button>)}
-        {taskSearch && !filteredTasks.length && <div className="sidebar-empty"><Search size={20} /><p>没有匹配的流程</p><button onClick={() => setTaskSearch('')}>清除搜索</button></div>}
-        {ws.initialized && !ws.tasks.length && !taskSearch && <p className="sidebar-empty">暂无流程</p>}
-      </nav>
+      <label className="task-search"><Search size={15} /><input ref={searchRef} aria-label="搜索流程" placeholder="搜索流程或文件夹…" value={taskSearch} onChange={event => setTaskSearch(event.target.value)} /><kbd>⌘ K</kbd></label>
+      <LibraryNav index={index} folderId={folderId} query={taskSearch} activeId={ws.task?.id} disabled={!ws.initialized || !!ws.busy || ws.conflict} initialized={ws.initialized}
+        browse={browse} open={id => { setSidebarOpen(false); void ws.openTask(id); }} refresh={ws.refreshTasks} shown={narrow ? sidebarOpen : !sidebarCollapsed}
+        createTask={() => { setNewTitle(''); setImportError(''); setSidebarOpen(false); setDialog('new'); }} />
       <div className="sidebar-bottom"><button className="sidebar-help" onClick={() => { setSidebarOpen(false); setDialog('shortcuts'); }}><Keyboard size={16} /><span>快捷键</span><kbd>?</kbd></button></div>
     </TaskSidebar>
 
@@ -744,12 +750,12 @@ function Workspace() {
     </main>
 
     {dialog && <Dialog onClose={() => setDialog(null)} busy={!!ws.busy} labelledBy="dialog-title" actions={
-      dialog === 'new' ? <button className="button primary full-width" disabled={!newTitle.trim() || !!ws.busy} onClick={() => void ws.createTask(newTitle).then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}创建并打开</button>
+      dialog === 'new' ? <button className="button primary full-width" disabled={!newTitle.trim() || !!ws.busy} onClick={() => void ws.createTask(newTitle, folderId).then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}创建并打开</button>
       : dialog === 'feedback' ? <button className="button primary full-width" disabled={!feedback.trim() || !!ws.busy} onClick={() => void ws.perform('submit', { feedback }).then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <ArrowRight size={16} />}提交图与反馈</button>
       : dialog === 'approve' ? <button className="button primary full-width" disabled={!!issues.length || !!ws.busy} onClick={() => void ws.perform('approve').then(ok => { if (ok) setDialog(null); })}>{ws.busy ? <Loader2 className="spin" size={16} /> : <Check size={16} />}确认并开始实现</button>
       : dialog === 'cancel' ? <button className="button primary full-width" disabled={!!ws.busy} onClick={() => void ws.perform('cancel').then(ok => { if (ok) setDialog(null); })}>保留草稿并暂停</button> : undefined
     }>
-      {dialog === 'shortcuts' ? <><h2 id="dialog-title">快捷键</h2><dl className="shortcut-list"><div><dt>搜索流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>K</kbd></dd></div><div><dt>撤销</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Z</kbd></dd></div><div><dt>重做</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Shift</kbd><kbd>Z</kbd></dd></div><div><dt>存档当前版本</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>S</kbd></dd></div><div><dt>删除选中节点或连线</dt><dd><kbd>Delete</kbd></dd></div><div><dt>新节点接在选中项后</dt><dd>选中后点底部添加</dd></div><div><dt>编辑节点文字</dt><dd>双击卡片</dd></div><div><dt>多选节点</dt><dd><kbd>Shift</kbd><kbd>点击 / 拖选</kbd></dd></div><div><dt>把所选组成子流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>G</kbd></dd></div><div><dt>解散选中的子流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Shift</kbd><kbd>G</kbd></dd></div><div><dt>进入选中的子流程</dt><dd><kbd>Enter</kbd></dd></div><div><dt>退出选择 / 返回上一层 / 关闭弹窗</dt><dd><kbd>Esc</kbd></dd></div></dl><div className="modal-tip"><MousePointer2 size={17} /><span>拖动卡片边缘即可创建连线；选中连线后拖动端点可重新连接。把节点拖到子流程卡片上即可移入，双击卡片进入。滚动画布平移，双指缩放调整视野。</span></div></> : dialog === 'new' ? <><span className="modal-icon"><Plus size={22} /></span><h2 id="dialog-title">新建流程</h2><label className="field-label" htmlFor="new-title">任务名称</label><input id="new-title" autoFocus value={newTitle} maxLength={200} placeholder="例如：消息处理与失败重试" onChange={event => setNewTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newTitle.trim() && !ws.busy) void ws.createTask(newTitle).then(ok => { if (ok) setDialog(null); }); }} /><div className="modal-tip"><Sparkles size={16} /><span>生成初稿：在 coding agent 中调用 diagram-plan skill。</span></div><input ref={importInput} id="import-file" className="visually-hidden" type="file" accept=".json,application/json" tabIndex={-1} aria-label="选择流程 JSON 文件" onChange={event => void importGraph(event.target.files?.[0])} /><button className="button secondary full-width import-button" disabled={!!ws.busy} onClick={() => importInput.current?.click()}><Import size={16} />导入流程 JSON</button>{importError && <p className="import-error" role="alert">{importError}</p>}</> : dialog === 'feedback' ? <><span className="modal-icon"><MessageSquare size={22} /></span><h2 id="dialog-title">告诉 agent 要改哪里</h2><p>当前图、完整说明和 PNG 会一并交给 agent。提交后暂时只读，避免双方同时修改。</p><label className="field-label" htmlFor="feedback">修改要求</label><textarea id="feedback" autoFocus rows={6} value={feedback} placeholder="例如：在校验失败后增加一次重试；保持现在的主线与布局。" onChange={event => setFeedback(event.target.value)} disabled={!!ws.busy} /></> : dialog === 'approve' ? <><span className="modal-icon"><ShieldCheck size={24} /></span><h2 id="dialog-title">确认并开始实现？</h2><p>确认后将授权 agent 按当前流程实现，并冻结此版本。后续修改需创建修订。</p><div className="approval-summary"><strong>{displayGraph.title}</strong><span>{displayGraph.nodes.length} 个节点 · {displayGraph.edges.length} 条连线 · {displayGraph.nodes.filter(n => n.data.notes).length} 张说明卡片</span></div>{!!issues.length && <div className="approval-issues">{issues.map((issue, i) => <p key={i}><AlertCircle size={14} />{issue}</p>)}</div>}<p className="field-hint">这是对 agent 的实施授权；不是宿主工具权限级别的强制拦截。</p></> : <><span className="modal-icon"><Pause size={22} /></span><h2 id="dialog-title">暂停这次规划？</h2><p>当前草稿和历史都会保留。agent 会收到取消状态，不应开始实现。你可以随时回来继续编辑。</p></>}
+      {dialog === 'shortcuts' ? <><h2 id="dialog-title">快捷键</h2><dl className="shortcut-list"><div><dt>搜索流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>K</kbd></dd></div><div><dt>撤销</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Z</kbd></dd></div><div><dt>重做</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Shift</kbd><kbd>Z</kbd></dd></div><div><dt>存档当前版本</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>S</kbd></dd></div><div><dt>删除选中节点或连线</dt><dd><kbd>Delete</kbd></dd></div><div><dt>新节点接在选中项后</dt><dd>选中后点底部添加</dd></div><div><dt>编辑节点文字</dt><dd>双击卡片</dd></div><div><dt>多选节点</dt><dd><kbd>Shift</kbd><kbd>点击 / 拖选</kbd></dd></div><div><dt>把所选组成子流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>G</kbd></dd></div><div><dt>解散选中的子流程</dt><dd><kbd>⌘ / Ctrl</kbd><kbd>Shift</kbd><kbd>G</kbd></dd></div><div><dt>进入选中的子流程</dt><dd><kbd>Enter</kbd></dd></div><div><dt>退出选择 / 返回上一层 / 关闭弹窗</dt><dd><kbd>Esc</kbd></dd></div></dl><div className="modal-tip"><MousePointer2 size={17} /><span>拖动卡片边缘即可创建连线；选中连线后拖动端点可重新连接。把节点拖到子流程卡片上即可移入，双击卡片进入。滚动画布平移，双指缩放调整视野。</span></div></> : dialog === 'new' ? <><span className="modal-icon"><Plus size={22} /></span><h2 id="dialog-title">新建流程</h2>{folderId && <p className="library-context">{index.path(folderId)}</p>}<label className="field-label" htmlFor="new-title">任务名称</label><input id="new-title" autoFocus value={newTitle} maxLength={200} placeholder="例如：消息处理与失败重试" onChange={event => setNewTitle(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newTitle.trim() && !ws.busy) void ws.createTask(newTitle, folderId).then(ok => { if (ok) setDialog(null); }); }} /><div className="modal-tip"><Sparkles size={16} /><span>生成初稿：在 coding agent 中调用 diagram-plan skill。</span></div><input ref={importInput} id="import-file" className="visually-hidden" type="file" accept=".json,application/json" tabIndex={-1} aria-label="选择流程 JSON 文件" onChange={event => void importGraph(event.target.files?.[0])} /><button className="button secondary full-width import-button" disabled={!!ws.busy} onClick={() => importInput.current?.click()}><Import size={16} />导入流程 JSON</button>{importError && <p className="import-error" role="alert">{importError}</p>}</> : dialog === 'feedback' ? <><span className="modal-icon"><MessageSquare size={22} /></span><h2 id="dialog-title">告诉 agent 要改哪里</h2><p>当前图、完整说明和 PNG 会一并交给 agent。提交后暂时只读，避免双方同时修改。</p><label className="field-label" htmlFor="feedback">修改要求</label><textarea id="feedback" autoFocus rows={6} value={feedback} placeholder="例如：在校验失败后增加一次重试；保持现在的主线与布局。" onChange={event => setFeedback(event.target.value)} disabled={!!ws.busy} /></> : dialog === 'approve' ? <><span className="modal-icon"><ShieldCheck size={24} /></span><h2 id="dialog-title">确认并开始实现？</h2><p>确认后将授权 agent 按当前流程实现，并冻结此版本。后续修改需创建修订。</p><div className="approval-summary"><strong>{displayGraph.title}</strong><span>{displayGraph.nodes.length} 个节点 · {displayGraph.edges.length} 条连线 · {displayGraph.nodes.filter(n => n.data.notes).length} 张说明卡片</span></div>{!!issues.length && <div className="approval-issues">{issues.map((issue, i) => <p key={i}><AlertCircle size={14} />{issue}</p>)}</div>}<p className="field-hint">这是对 agent 的实施授权；不是宿主工具权限级别的强制拦截。</p></> : <><span className="modal-icon"><Pause size={22} /></span><h2 id="dialog-title">暂停这次规划？</h2><p>当前草稿和历史都会保留。agent 会收到取消状态，不应开始实现。你可以随时回来继续编辑。</p></>}
       {!!ws.busy && <p className="modal-progress" role="status">{ws.busy}</p>}
       {!!ws.error && <p className="modal-error" role="alert">{ws.error}</p>}
     </Dialog>}

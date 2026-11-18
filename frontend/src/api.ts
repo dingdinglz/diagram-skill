@@ -1,4 +1,4 @@
-import type { Graph, Task, TaskSummary, HistoricalVersion } from './types';
+import type { Graph, Task, Library, LibraryEntry, HistoricalVersion } from './types';
 
 const params = new URLSearchParams(window.location.hash.slice(1));
 const key = `flowplan:token:${window.location.origin}`;
@@ -29,8 +29,10 @@ async function request<T>(path: string, method = 'GET', body?: unknown): Promise
   return response.json() as Promise<T>;
 }
 export const api = {
-  list: () => request<TaskSummary[]>('/tasks'),
-  create: (title: string, mode: 'manual' | 'agent' = 'manual', graph?: Graph) => request<Task>('/tasks', 'POST', { title, mode, ...(graph ? { graph } : {}) }),
+  library: () => request<Library>('/library'),
+  createFolder: (name: string, parentId: string | null) => request<LibraryEntry>('/folders', 'POST', { name, parentId }),
+  moveEntry: (id: string, parentId: string | null, index?: number) => request<LibraryEntry>('/library/move', 'POST', { id, parentId, index }),
+  create: (title: string, mode: 'manual' | 'agent' = 'manual', graph?: Graph, parentId: string | null = null) => request<Task>('/tasks', 'POST', { title, mode, parentId, ...(graph ? { graph } : {}) }),
   task: (id: string) => request<Task>(`/tasks/${encodeURIComponent(id)}`),
   save: (id: string, revision: number, graph: Graph) => request<Task>(`/tasks/${encodeURIComponent(id)}/draft`, 'PUT', { revision, graph }),
   action: (id: string, action: string, body: unknown) => request<Task>(`/tasks/${encodeURIComponent(id)}/${action}`, 'POST', body),

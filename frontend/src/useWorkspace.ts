@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, initialTaskId, saveBlob } from './api';
 import { blankGraph, cloneGraph, sameGraph, approvalIssues } from './model';
 import { renderGraphPng } from './export';
-import type { Graph, Task, TaskSummary } from './types';
+import type { Graph, Task, Library } from './types';
 
 const recoveryKey = (id: string) => `flowplan:recovery:${id}`;
 export function useWorkspace() {
-  const [tasks, setTasks] = useState<TaskSummary[]>([]);
+  const [library, setLibrary] = useState<Library>({ tasks: [], entries: [] });
+  const librarySequence = useRef(0);
   const [task, setTask] = useState<Task | null>(null);
   const [graph, setGraph] = useState<Graph>(blankGraph());
   const [dirty, setDirty] = useState(false);
@@ -33,7 +34,10 @@ export function useWorkspace() {
     } else setError(e instanceof Error ? e.message : '操作失败，请重试。');
   }, []);
   const refreshTasks = useCallback(async () => {
-    setTasks(await api.list());
+    const sequence = ++librarySequence.current;
+    const result = await api.library();
+    if (sequence === librarySequence.current) setLibrary(result);
+    return result;
   }, []);
   const acceptTask = useCallback((next: Task, resetHistory = false) => {
     taskRef.current = next; setTask(next);
@@ -110,16 +114,15 @@ export function useWorkspace() {
     let disposed = false;
     (async () => {
       try {
-        const list = await api.list();
+        const list = await refreshTasks();
         if (disposed) return;
-        setTasks(list);
-        const id = initialTaskId || list[0]?.id;
+        const id = initialTaskId || list.tasks[0]?.id;
         if (id) await loadTask(id);
       } catch (e) { if (!disposed) report(e); }
       finally { if (!disposed) setInitialized(true); }
     })();
     return () => { disposed = true; };
-  }, [loadTask, report]);
+  }, [loadTask, refreshTasks, report]);
 
   useEffect(() => {
     if (!dirty || !task || busy || conflict) return;
@@ -134,9 +137,9 @@ export function useWorkspace() {
       if (dirtyRef.current || busyRef.current || savingPromise.current || conflictRef.current) return;
       const current = taskRef.current;
       try {
-        const [next, list] = await Promise.all([current ? api.task(current.id) : Promise.resolve(null), api.list()]);
+        const [next] = await Promise.all([current ? api.task(current.id) : Promise.resolve(null), refreshTasks()]);
         if (dirtyRef.current || busyRef.current || savingPromise.current || conflictRef.current) return;
-        setOnline(true); setTasks(list);
+        setOnline(true);
         if (next && taskRef.current?.id === next.id && next.revision !== taskRef.current.revision) {
           acceptTask(next, true);
           setNotice(next.status === 'draft' && current?.status === 'awaiting_agent' ? 'Agent 已提交修订，请检查后再确认。' : '已同步最新版本。');
@@ -144,7 +147,7 @@ export function useWorkspace() {
       } catch { setOnline(false); }
     }, 2200);
     return () => clearInterval(timer);
-  }, [acceptTask]);
+  }, [acceptTask, refreshTasks]);
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
       if (dirtyRef.current || busyRef.current) { event.preventDefault(); event.returnValue = ''; }
@@ -160,22 +163,22 @@ export function useWorkspace() {
     catch (e) { report(e); }
     finally { setBusy(''); }
   };
-  const createTask = async (title: string) => {
+  const createTask = async (title: string, parentId: string | null = null) => {
     setBusy('正在创建画板…');
     try {
       await flush();
-      const next = await api.create(title.trim() || '未命名流程');
+      const next = await api.create(title.trim() || '未命名流程', 'manual', undefined, parentId);
       acceptTask(next, true); setRecovery(null); setError(''); await refreshTasks();
       return true;
     } catch (e) { report(e); return false; }
     finally { setBusy(''); }
   };
   /** Returns the failure for the import dialog to show; a rejected file is not a workspace error. */
-  const importTask = async (title: string, imported: Graph): Promise<string | null> => {
+  const importTask = async (title: string, imported: Graph, parentId: string | null = null): Promise<string | null> => {
     setBusy('正在导入流程…');
     try {
       await flush();
-      const next = await api.create(title.trim() || '未命名流程', 'manual', imported);
+      const next = await api.create(title.trim() || '未命名流程', 'manual', imported, parentId);
       acceptTask(next, true); setRecovery(null); setError(''); await refreshTasks();
       return null;
     } catch (e) {
@@ -238,7 +241,7 @@ export function useWorkspace() {
   const recover = () => { if (recovery) edit(recovery); setRecovery(null); };
   const discardRecovery = () => { if (taskRef.current) localStorage.removeItem(recoveryKey(taskRef.current.id)); setRecovery(null); };
 
-  return { tasks, task, graph, dirty, saving, busy, error, notice, conflict, online, initialized, recovery,
+  return { library, task, graph, dirty, saving, busy, error, notice, conflict, online, initialized, recovery,
     edit, undo, redo, canUndo: past.current.length > 0, canRedo: future.current.length > 0, beginDrag, endDrag,
     openTask, createTask, importTask, perform, exportPng, exportLocal, reload, recover, discardRecovery,
     flush, report, setError, setNotice, refreshTasks,

@@ -40,8 +40,18 @@ def parser():
     create.add_argument("--title", required=True)
     create.add_argument("--mode", choices=("manual", "agent"), default="manual")
     create.add_argument("--graph")
+    create.add_argument("--parent", metavar="ID", help="Create the task inside this library folder (default: root)")
     create.add_argument("--no-open", action="store_true")
     command("list", "List task summaries")
+    command("library", "Show task summaries and ordered folder/task entries")
+    folder = command("folder-create", "Create a library folder")
+    folder.add_argument("--name", required=True)
+    move = command("move", "Move or reorder a library task or folder")
+    move.add_argument("--id", required=True, help="Task or folder ID")
+    for child in (folder, move):
+        child.add_argument("--parent", metavar="ID", help="Destination folder ID (default: root)")
+        child.add_argument("--index", type=int, metavar="N",
+                           help="Zero-based sibling position after removal, counting tasks and folders (default: append)")
     show = command("show", "Show full task state")
     show.add_argument("--task", required=True)
     wait = command("wait", "Wait a bounded time for a handoff, approval, or cancellation")
@@ -145,8 +155,19 @@ def run(args):
             graph = require_object(graph_file(args.graph, args.project))
             graph.setdefault("title", args.title)
             graph = normalize_graph(graph)
-        descriptor, _ = start_server(store)
+        descriptor, reused = start_server(store)
         body = {"title": args.title, "mode": args.mode}
+        if args.parent is not None:
+            if reused:
+                # Older detached servers accept unknown create fields, silently filing at root.
+                try:
+                    request(descriptor, "GET", "/api/library", timeout=15)
+                except DiagramError as exc:
+                    if exc.status == 404:
+                        raise DiagramError("Restart this project's server with stop and start to enable folders",
+                                           409, "server_upgrade_required") from exc
+                    raise
+            body["parentId"] = args.parent
         if graph is not None:
             body["graph"] = graph
         task = request(descriptor, "POST", "/api/tasks", body, timeout=15)
@@ -156,6 +177,12 @@ def run(args):
         return {"task": task, "url": url}
     if args.command == "list":
         return store.list_tasks()
+    if args.command == "library":
+        return store.library()
+    if args.command == "folder-create":
+        return store.create_folder(args.name, args.parent, args.index)
+    if args.command == "move":
+        return store.move_entry(args.id, args.parent, args.index)
     if args.command == "show":
         return store.get_task(args.task)
     if args.command == "wait":

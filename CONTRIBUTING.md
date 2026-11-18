@@ -32,6 +32,7 @@ The browser smoke test needs [agent-browser](https://github.com/vercel-labs/agen
 ```sh
 npm run build
 npm run test:browser
+npm run test:library
 npm run test:connections
 npm run test:ui
 ```

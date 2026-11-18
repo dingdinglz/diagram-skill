@@ -47,6 +47,8 @@ python3 "$SCRIPT" validate --project "$PROJECT" "$GRAPH_FILE"
 python3 "$SCRIPT" create --project "$PROJECT" --title "Task title" --mode agent --graph "$GRAPH_FILE"
 ```
 
+If the user wants a task filed in a folder, run `python3 "$SCRIPT" library --project "$PROJECT"` to find its folder ID. Add `--parent "$FOLDER_ID"` to either `create` command; omit it to create at the root. For creating folders or moving existing tasks without recreating them, see [the CLI reference](references/cli.md#organize-the-library).
+
 Both modes open the local editor by default. Retain the returned task ID. If browser launch fails, give the user the returned private URL; do not manufacture another token or change to a public bind address. The fragment contains a credential: do not put it in graph notes, source files, shared logs, or commits.
 
 Explain that the user can edit and move nodes, connect branches, change notes, and save checkpoints. They can submit nonblank feedback for an agent revision, explicitly approve, or cancel. Browser autosave and closing the tab are **not approval**.

@@ -216,13 +216,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.respond(200, {"ok": True, "serverId": self.server.server_id})
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return
+            if parts == ["api", "library"] and method == "GET":
+                self.respond(200, store.library())
+                return
+            if parts == ["api", "folders"] and method == "POST":
+                body = self.body()
+                if "name" not in body:
+                    raise DiagramError("name is required")
+                self.respond(201, store.create_folder(body["name"], body.get("parentId"), body.get("index")))
+                return
+            if parts == ["api", "library", "move"] and method == "POST":
+                body = self.body()
+                if "id" not in body or "parentId" not in body:
+                    raise DiagramError("id and parentId are required (use null for the root)")
+                self.respond(200, store.move_entry(body["id"], body["parentId"], body.get("index")))
+                return
             if parts == ["api", "tasks"]:
                 if method == "GET":
                     self.respond(200, store.list_tasks())
                     return
                 if method == "POST":
                     body = self.body()
-                    self.respond(201, store.create(body.get("title", ""), body.get("mode", "manual"), body.get("graph")))
+                    self.respond(201, store.create(body.get("title", ""), body.get("mode", "manual"),
+                                                   body.get("graph"), body.get("parentId")))
                     return
             if len(parts) >= 3 and parts[:2] == ["api", "tasks"]:
                 task_id = parts[2]

@@ -45,7 +45,7 @@ Task = {
 }
 ```
 
-All mutations require `revision` equal to current revision, then increment it; conflict = HTTP 409 and must never overwrite unsaved changes. `create` starts revision 1 with an initial immutable JSON/MD snapshot (PNG can be absent until browser handoff). Browser autosaves draft graph. Submit/approve/checkpoint atomically accept current graph + its rendered PNG and save immutable version (diagram.json, diagram.md, diagram.png, metadata.json) before publishing task state. Submit requires nonblank feedback, creates a fresh requestId and enters awaiting_agent. Revise requires BOTH matching requestId and revision, records agent_revision JSON/MD snapshot, clears requestId and enters draft. Agent revises graph but does not fabricate a PNG. Cancel/resume invalidates any requestId. Restore copies any historical graph to a NEW draft and records restore snapshot; approved snapshots never mutate. Keep all earlier versions.
+All mutations of existing task state require `revision` equal to current revision, then increment it; conflict = HTTP 409 and must never overwrite unsaved changes. `create` starts revision 1 with an initial immutable JSON/MD snapshot (PNG can be absent until browser handoff). Browser autosaves draft graph. Submit/approve/checkpoint atomically accept current graph + its rendered PNG and save immutable version (diagram.json, diagram.md, diagram.png, metadata.json) before publishing task state. Submit requires nonblank feedback, creates a fresh requestId and enters awaiting_agent. Revise requires BOTH matching requestId and revision, records agent_revision JSON/MD snapshot, clears requestId and enters draft. Agent revises graph but does not fabricate a PNG. Cancel/resume invalidates any requestId. Restore copies any historical graph to a NEW draft and records restore snapshot; approved snapshots never mutate. Keep all earlier versions.
 
 `cancel` preserves current graph, enters cancelled; cannot cancel approved task. `resume` allowed only from cancelled/awaiting_agent -> draft. To edit an approved task use restore with its approvedVersion. Agent code must not start implementing until approved; this is a skill protocol, not a universal host permission sandbox.
 
@@ -55,7 +55,10 @@ Authorization: `Authorization: Bearer <random session token>` on every /api requ
 
 - GET /api/health -> {ok:true, protocol:1} (public, no project data)
 - GET /api/tasks -> task summary array (id,title,status,revision,updatedAt,mode)
-- POST /api/tasks {title, mode, graph?} -> Task
+- GET /api/library -> `{tasks: TaskSummary[], entries: LibraryEntry[]}` (200)
+- POST /api/folders `{name, parentId?, index?}` -> created LibraryEntry (201)
+- POST /api/library/move `{id, parentId, index?}` -> moved LibraryEntry (200); `parentId` is required, including explicit `null` for root
+- POST /api/tasks {title, mode, graph?, parentId?} -> Task (201; defaults to root)
 - GET /api/tasks/{id} -> Task
 - PUT /api/tasks/{id}/draft {revision, graph} -> Task (draft only)
 - POST /api/tasks/{id}/checkpoint {revision, graph, png} -> Task (draft only)
@@ -68,11 +71,13 @@ Authorization: `Authorization: Bearer <random session token>` on every /api requ
 - GET /api/tasks/{id}/versions/{versionId} -> {metadata fields..., graph}
 - GET /api/tasks/{id}/versions/{versionId}/diagram.json|diagram.md|diagram.png -> bytes (authorized downloads)
 
+A `LibraryEntry` has `id`, `kind` (`task` or `folder`) and `parentId` (folder ID or `null` for root); folders also have `name`. `tasks` contains the same summaries as GET /api/tasks; join task entries to summaries by ID. The order of entries with the same parent gives the sibling order across both kinds. Folder creation defaults to root. For folder creation and moves, omit `index` to append, or supply a zero-based position among destination siblings (after removing the moved entry). Library moves do not change task revisions, versions or approval.
+
 `png` is a `data:image/png;base64,...` string. No API accepts arbitrary filesystem paths. No API executes user commands. API and UI share same origin; polling is sufficient (no websocket dependencies).
 
 ## Local storage
 
-`<project>/.diagram-skill/tasks/<id>/state.json`, `versions/<version-id>/{diagram.json,diagram.md,diagram.png?,metadata.json}`. Session descriptor `<project>/.diagram-skill/server.json` (private token + pid + port). Single server per project; stale descriptors handled safely. Never access task/version paths containing traversal or follow symlinks outside the workspace. Durable writes use temp files + atomic rename; use a lock for each transaction. Approval artifacts must be durable before approved state. A partially written/orphan snapshot must never be advertised as approved.
+`<project>/.diagram-skill/tasks/<id>/state.json`, `versions/<version-id>/{diagram.json,diagram.md,diagram.png?,metadata.json}`. Project folder membership and sibling order are stored separately in `<project>/.diagram-skill/library.json`; folder names are labels, never path segments. Existing tasks without entries are appended at the root in their legacy list order. Session descriptor `<project>/.diagram-skill/server.json` (private token + pid + port). Single server per project; stale descriptors handled safely. Never access task/version paths containing traversal or follow symlinks outside the workspace. Durable writes use temp files + atomic rename; use a lock for each transaction. Approval artifacts must be durable before approved state. A partially written/orphan snapshot must never be advertised as approved.
 
 ## CLI (scripts/diagram.py)
 
@@ -80,8 +85,11 @@ Each subcommand accepts `--project PATH` (defaults cwd), where applicable:
 
 - `start [--port 0] [--no-open]`: start/reuse detached server, print JSON URL; default opens browser.
 - `serve [--port 0]`: internal foreground server entry point.
-- `create --title TEXT [--mode manual|agent] [--graph FILE] [--no-open]`: auto-start server, create task, print task and URL including fragment token and task ID; open unless --no-open.
-- `list`: summaries.
+- `create --title TEXT [--mode manual|agent] [--graph FILE] [--parent ID] [--no-open]`: auto-start server, create task, print task and URL including fragment token and task ID; open unless --no-open.
+- `list`: flat task summaries, unchanged.
+- `library`: task summaries and ordered task/folder entries.
+- `folder-create --name TEXT [--parent ID] [--index N]`: create a folder, returning the new entry.
+- `move --id ID [--parent ID] [--index N]`: move a task or folder, returning its entry. Omit `--parent` for root.
 - `show --task ID`: full state.
 - `wait --task ID [--timeout 25]`: bounded polling until awaiting_agent/approved/cancelled. Prints status, requestId, revision, feedback and handoff artifact paths where available; timeout returns a structured pending result, not authorization to proceed.
 - `revise --task ID --revision N --request-id ID --graph FILE`: apply requested agent changes, optimistic concurrency.
@@ -89,7 +97,7 @@ Each subcommand accepts `--project PATH` (defaults cwd), where applicable:
 - `validate FILE`: validate graph, output useful errors without requiring a server.
 - `stop`: gracefully shut down ONLY the matching project's server, without killing an unrelated PID. Implement via authenticated endpoint if appropriate (backend-only /api/shutdown).
 
-CLI reads/wait/export/revise use the same confined Store and cross-process transaction lock as HTTP, and work without a running renderer/server. Startup/creation/shutdown use authenticated server coordination. CLI JSON output must not leak credentials into artifacts or log files. Browser PNG generation is required for submit/approve/checkpoint; initial/agent_revision/restore snapshots may lack PNG because no renderer is running. Browser failure to produce PNG means no handoff/approval and preserves draft.
+CLI reads, `folder-create`, `move`, `wait`, `export` and `revise` use the same confined Store and cross-process transaction lock as HTTP, and work without a running renderer/server. `start`, task `create` and `stop` use authenticated server coordination. CLI JSON output must not leak credentials into artifacts or log files. Browser PNG generation is required for submit/approve/checkpoint; initial/agent_revision/restore snapshots may lack PNG because no renderer is running. Browser failure to produce PNG means no handoff/approval and preserves draft.
 
 ## Version 2 presentation
 

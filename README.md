@@ -45,7 +45,8 @@ Each approval saves `diagram.json`, `diagram.md`, and `diagram.png`. The PNG inc
 
 - **Canvas:** switch between the main flow and its branches, add nodes from the bottom toolbar, and use “100% 阅读” to read cards at full size.
 - **Details:** read flow descriptions and node notes as Markdown in the side panel. Enter editing mode when you want to make changes.
-- **Navigation and history:** search your flows in the left sidebar, check save status, and open version history without leaving the workspace.
+- **Project folders:** drag flows and folders into order, or drop onto a folder to move inside. Open a folder in the sidebar to create a subfolder or a flow inside it; search finds items at every depth. Agents can use the same directory with [`library`, `folder-create`, and `move`](skills/diagram-plan/references/cli.md).
+- **History:** moving a flow keeps its drafts, approval state, and version history intact.
 
 The light interface uses locally bundled Noto Sans SC and Phosphor icons. Canvas background motion can be paused and respects reduced-motion preferences. On narrow screens, navigation and details open as dismissible panels. [See the mobile reader](docs/images/editor-mobile.png).
 

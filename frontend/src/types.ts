@@ -78,6 +78,10 @@ export interface TaskSummary {
   updatedAt: string;
   mode: 'manual' | 'agent';
 }
+export type LibraryEntry = { id: string; parentId: string | null } & (
+  { kind: 'folder'; name: string } | { kind: 'task' }
+);
+export interface Library { tasks: TaskSummary[]; entries: LibraryEntry[] }
 export interface HistoricalVersion extends Version { graph: Graph }
 export const KIND_LABELS: Record<NodeKind, string> = { start: '开始', step: '处理步骤', decision: '条件判断', end: '结束' };
 export const GROUP_KIND_LABELS: Record<GraphGroup['kind'], string> = { subflow: '子流程', loop: '循环', branch: '分支' };

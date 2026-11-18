@@ -699,6 +699,87 @@ class Directory:
                 os.close(fd)
 
 
+def _folder_name(value):
+    name = text(value, "folder name", 500)
+    if not name.strip():
+        raise DiagramError("Folder name must not be blank")
+    return name
+
+
+def _read_library(root):
+    try:
+        raw = root.read("library.json")
+    except DiagramError as exc:
+        if exc.status == 404:
+            return None
+        raise
+
+    corrupt = DiagramError("Corrupt library", 500, "corrupt_library")
+    try:
+        entries = require_object(parse_json(raw)).get("entries")
+        if not isinstance(entries, list):
+            raise corrupt
+        by_id = {}
+        for entry in entries:
+            kind = require_object(entry).get("kind")
+            keys = {"id", "kind", "parentId"}
+            if kind == "folder":
+                keys.add("name")
+                _folder_name(entry.get("name"))
+            if kind not in ("task", "folder") or entry.keys() != keys:
+                raise corrupt
+            entry_id = validate_id(entry["id"])
+            if entry_id in by_id:
+                raise corrupt
+            if entry["parentId"] is not None:
+                validate_id(entry["parentId"])
+            by_id[entry_id] = entry
+    except DiagramError as exc:
+        if exc is corrupt:
+            raise
+        raise corrupt from exc
+
+    # Memoize completed chains so even a deep, reverse-ordered tree is linear.
+    checked = set()
+    for entry_id in by_id:
+        path = set()
+        while entry_id is not None and entry_id not in checked:
+            if entry_id in path:
+                raise corrupt
+            path.add(entry_id)
+            entry_id = by_id[entry_id]["parentId"]
+            if entry_id is not None and (entry_id not in by_id or by_id[entry_id]["kind"] != "folder"):
+                raise corrupt
+        checked.update(path)
+    return entries
+
+
+def _insert_entry(entries, entry, index=None):
+    """Insert relative to destination siblings. A moving entry is already removed."""
+    by_id = {item["id"]: item for item in entries}
+    if entry["id"] in by_id:
+        raise DiagramError("Duplicate library id", 409, "id_conflict")
+    parent = entry["parentId"]
+    if parent is not None:
+        validate_id(parent, "parent id")
+    while parent is not None:
+        if parent == entry["id"]:
+            raise DiagramError("Cannot move an entry into itself or its descendants")
+        if parent not in by_id:
+            raise DiagramError("Parent folder not found", 404, "not_found")
+        if by_id[parent]["kind"] != "folder":
+            raise DiagramError("Parent must be a folder")
+        parent = by_id[parent]["parentId"]
+    if index is not None:
+        positions = [i for i, item in enumerate(entries) if item["parentId"] == entry["parentId"]]
+        if type(index) is not int or not 0 <= index <= len(positions):
+            raise DiagramError("Index must be an integer between zero and the destination sibling count")
+        if index < len(positions):
+            entries.insert(positions[index], entry)
+            return
+    entries.append(entry)
+
+
 class Store:
     def __init__(self, project):
         self.project = Path(project).expanduser().resolve()
@@ -771,7 +852,7 @@ class Store:
         state["versions"].append(metadata)
         return version_id
 
-    def create(self, title, mode="manual", graph=None):
+    def create(self, title, mode="manual", graph=None, parent_id=None):
         title = text(title, "title", 500)
         if mode not in ("manual", "agent"):
             raise DiagramError("mode must be manual or agent")
@@ -787,7 +868,12 @@ class Store:
         state = {"id": task_id, "mode": mode, "status": "draft", "revision": 1,
                  "graph": graph, "feedback": "", "requestId": None, "approvedVersion": None,
                  "createdAt": timestamp, "updatedAt": timestamp, "versions": []}
-        with self.transaction() as (_, tasks):
+        with self.transaction() as (root, tasks):
+            entries, _ = self._library_entries(root, tasks)
+            _insert_entry(entries, {"id": task_id, "kind": "task", "parentId": parent_id})
+            # Make placement durable *before* publishing the task directory. If
+            # creation stops here, reconciliation drops the unpublished entry.
+            self._write_library(root, entries)
             pending = ".pending-" + uuid.uuid4().hex
             with tasks.child(pending, create=True) as task:
                 self._snapshot(task, state, "initial")
@@ -796,18 +882,84 @@ class Store:
             os.fsync(tasks.fd)
         return state
 
-    def list_tasks(self):
+    def _task_summaries(self, tasks, ids):
         result = []
-        with self.transaction() as (_, tasks):
-            for task_id in tasks.names():
-                if not ID_RE.fullmatch(task_id):
-                    continue
-                with tasks.child(task_id) as task:
-                    state = self._state(task)
-                    result.append({"id": state["id"], "title": state["graph"]["title"],
-                                   "status": state["status"], "revision": state["revision"],
-                                   "updatedAt": state["updatedAt"], "mode": state["mode"]})
+        for task_id in ids:
+            if not ID_RE.fullmatch(task_id):
+                continue
+            with tasks.child(task_id) as task:
+                state = self._state(task)
+                result.append({"id": state["id"], "title": state["graph"]["title"],
+                               "status": state["status"], "revision": state["revision"],
+                               "updatedAt": state["updatedAt"], "mode": state["mode"]})
         return sorted(result, key=lambda item: (item["updatedAt"], item["id"]), reverse=True)
+
+    def list_tasks(self):
+        with self.transaction() as (_, tasks):
+            return self._task_summaries(tasks, tasks.names())
+
+    @staticmethod
+    def _write_library(root, entries):
+        raw = json_bytes({"entries": entries})
+        if len(raw) > MAX_STATE_BYTES:
+            raise DiagramError("Library exceeds the storage limit", 409, "library_full")
+        root.atomic_write("library.json", raw)
+
+    def _library_entries(self, root, tasks, summaries=None):
+        stored = _read_library(root)
+        task_ids = ({s["id"] for s in summaries} if summaries is not None else
+                    {name for name in tasks.names() if ID_RE.fullmatch(name)})
+        entries = []
+        missing = task_ids.copy()
+        for entry in stored or ():
+            if entry["kind"] == "folder":
+                if entry["id"] in task_ids:
+                    raise DiagramError("Folder id conflicts with task id", 500, "corrupt_library")
+            elif entry["id"] not in task_ids:
+                continue  # Interrupted create: no published task, no visible placement.
+            else:
+                missing.remove(entry["id"])
+            entries.append(entry)
+        if missing:
+            # Older writers may create tasks without a sidecar. Import them in
+            # legacy list order once; subsequent edits must not reorder them.
+            if summaries is None:
+                summaries = self._task_summaries(tasks, missing)
+            entries.extend({"id": s["id"], "kind": "task", "parentId": None}
+                           for s in summaries if s["id"] in missing)
+        return entries, entries != stored
+
+    def library(self):
+        with self.transaction() as (root, tasks):
+            summaries = self._task_summaries(tasks, tasks.names())
+            entries, changed = self._library_entries(root, tasks, summaries)
+            if changed:
+                self._write_library(root, entries)
+            return {"tasks": summaries, "entries": entries}
+
+    def create_folder(self, name, parent_id=None, index=None):
+        entry = {"id": "f-" + uuid.uuid4().hex, "kind": "folder", "parentId": parent_id,
+                 "name": _folder_name(name)}
+        with self.transaction() as (root, tasks):
+            entries, _ = self._library_entries(root, tasks)
+            _insert_entry(entries, entry, index)
+            self._write_library(root, entries)
+            return entry
+
+    def move_entry(self, entry_id, parent_id=None, index=None):
+        validate_id(entry_id, "entry id")
+        with self.transaction() as (root, tasks):
+            entries, _ = self._library_entries(root, tasks)
+            for i, entry in enumerate(entries):
+                if entry["id"] == entry_id:
+                    entries.pop(i)
+                    break
+            else:
+                raise DiagramError("Entry not found", 404, "not_found")
+            entry["parentId"] = parent_id
+            _insert_entry(entries, entry, index)
+            self._write_library(root, entries)
+            return entry
 
     def get_task(self, task_id, lock_timeout=10):
         validate_id(task_id, "task id")
