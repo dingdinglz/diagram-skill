@@ -122,6 +122,24 @@ def main():
                 wait_for('document.activeElement?.getAttribute("aria-label") === "搜索流程"')
                 assert evaluate(width) == initial + 64
 
+            with case('resize and restore inspector width'):
+                width = 'document.querySelector(".inspector").offsetWidth'
+                initial = evaluate(width)
+                edge = evaluate('Math.round(document.querySelector(".inspector").getBoundingClientRect().left)')
+                browser('mouse', 'move', str(edge), '320')
+                browser('mouse', 'down')
+                browser('mouse', 'move', str(edge - 96), '320')
+                browser('mouse', 'up')
+                assert evaluate(width) == initial + 96
+                browser('focus', '.inspector-splitter')
+                browser('press', 'ArrowRight')
+                assert evaluate(width) == initial + 80
+                click('收起详情面板')
+                click('展开详情面板')
+                assert evaluate(width) == initial + 80
+                browser('reload')
+                wait_for(f'document.querySelector(".inspector")?.offsetWidth === {initial + 80}')
+
             with case('document reading, semantic overview and viewport continuity'):
                 assert evaluate('!!document.querySelector(".graph-reader .markdown")')
                 assert not evaluate('!!document.querySelector("#graph-title")')
