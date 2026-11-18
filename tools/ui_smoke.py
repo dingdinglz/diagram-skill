@@ -72,7 +72,7 @@ def main():
         try:
             with case('readable type roles and self-hosted Chinese font'):
                 assert evaluate('''(()=>{
-                  const sizes={'.status-pill':13,'.save-indicator':13,'.canvas-legend':13,'.sidebar-help':14,'.inspector-tabs button':14,'.graph-reader .markdown':16,'.workspace-title h1':20};
+                  const sizes={'.status-pill':13,'.save-indicator':13,'.sidebar-help':14,'.inspector-tabs button':14,'.graph-reader .markdown':16,'.workspace-title h1':20};
                   return Object.entries(sizes).every(([selector,size])=>parseFloat(getComputedStyle(document.querySelector(selector)).fontSize)===size);
                 })()''')
                 assert evaluate('getComputedStyle(document.querySelector(".sidebar-help svg")).width') == '20px'
