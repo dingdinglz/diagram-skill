@@ -2,7 +2,6 @@
 .aurora-background { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; background: radial-gradient(ellipse at 12% 0%, #e6edfb 0%, transparent 58%), radial-gradient(ellipse at 100% 10%, #e3f0ee 0%, transparent 52%), linear-gradient(180deg, #f4f7fc, var(--canvas) 78%); }
 .aurora-background canvas { display: block; width: 100%; height: 100%; }
 .canvas-area > .react-flow { z-index: 1; background: transparent; }
-.canvas-area > .canvas-legend { z-index: 2; }
 .ambient-toggle { margin-left: auto; }
 .ambient-toggle[aria-pressed=true] { color: var(--accent); }
 .ambient-toggle-empty { position: absolute; top: 18px; right: 18px; z-index: 5; background: #ffffffc7; border: 1px solid var(--line); }
