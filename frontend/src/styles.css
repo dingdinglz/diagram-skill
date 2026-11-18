@@ -32,10 +32,12 @@ kbd { font-size: var(--text-small); line-height: 22px; min-width: 24px; padding:
 .app-shell { display: flex; height: 100dvh; min-height: 0; overflow: hidden; }
 .sidebar { position: relative; flex: none; display: flex; flex-direction: column; padding: 0 12px 14px; border-right: 1px solid var(--line); background: var(--nav); color: var(--nav-ink); z-index: 15; min-height: 0; }
 .sidebar[hidden] { display: none; }
-.sidebar-splitter { position: absolute; inset: 0 -7px 0 auto; width: 14px; cursor: col-resize; touch-action: none; user-select: none; }
-.sidebar-splitter::after { content: ''; position: absolute; inset: 0 6px; background: transparent; }
-.sidebar-splitter:is(:hover, :active, :focus-visible)::after { background: var(--accent); }
-.sidebar-splitter:focus-visible { outline: none; }
+.panel-splitter { position: absolute; top: 0; bottom: 0; width: 14px; z-index: 1; cursor: col-resize; touch-action: none; user-select: none; }
+.sidebar-splitter { right: -7px; }
+.inspector-splitter { left: -7px; }
+.panel-splitter::after { content: ''; position: absolute; inset: 0 6px; background: transparent; }
+.panel-splitter:is(:hover, :active, :focus-visible)::after { background: var(--accent); }
+.panel-splitter:focus-visible { outline: none; }
 .brand-row { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; height: 72px; margin: 0 -12px 16px; padding: 0 22px; border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 10px; font-size: var(--text-title); font-weight: var(--weight-semibold); letter-spacing: -.4px; color: var(--ink); }
 .brand-mark { display: block; width: 26px; height: 26px; flex-shrink: 0; }
@@ -197,7 +199,7 @@ kbd { font-size: var(--text-small); line-height: 22px; min-width: 24px; padding:
 .react-flow__node-loop-area { pointer-events: none !important; }
 
 /* Reading and editing */
-.inspector { flex: 0 0 380px; width: 380px; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--paper); z-index: 8; }
+.inspector { position: relative; flex: none; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--paper); z-index: 8; }
 .inspector-tabs { display: flex; align-items: stretch; border-bottom: 1px solid var(--line); flex-shrink: 0; height: 56px; padding: 0 20px; gap: 18px; }
 .inspector-tabs > button:not(.icon-button) { position: relative; display: flex; align-items: center; gap: 8px; font-size: var(--text-ui); font-weight: var(--weight-medium); line-height: 20px; color: var(--reading-muted); padding: 0 2px; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 150ms; }
 .inspector-tabs > button:not(.icon-button) > svg { width: 18px; height: 18px; flex-shrink: 0; }
@@ -464,8 +466,8 @@ button.outline-toggle:hover { color: var(--ink); background: var(--soft-surface)
 .group-dissolve { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
 .group-dissolve .field-hint { margin-top: 6px; }
 
-@media (max-width: 1280px) { .workspace-header { padding-inline: 20px; }.inspector { flex-basis: 336px; width: 336px; }.header-actions { gap: 8px; }.review-bar { padding-inline: 20px; }.checkpoint-button { display: none; } }
-@media (max-width: 1100px) { .inspector { position: absolute; right: 0; top: 0; bottom: 0; width: 380px; box-shadow: -8px 0 30px #1e315019; }.header-separator { display: none; }.review-status span { max-width: 160px; }.inspector-tabs { background: var(--paper); } }
+@media (max-width: 1280px) { .workspace-header { padding-inline: 20px; }.header-actions { gap: 8px; }.review-bar { padding-inline: 20px; }.checkpoint-button { display: none; } }
+@media (max-width: 1100px) { .inspector { position: absolute; right: 0; top: 0; bottom: 0; box-shadow: -8px 0 30px #1e315019; }.header-separator { display: none; }.review-status span { max-width: 160px; }.inspector-tabs { background: var(--paper); } }
 @media (max-width: 760px) {
   .mobile-only { display: inline-flex !important; }
   .sidebar { position: fixed; inset: 0 auto 0 0; width: 280px; max-width: 88vw; transform: translateX(-100%); transition: transform 220ms var(--ease-out), visibility 0s linear 220ms; z-index: 25; visibility: hidden; }

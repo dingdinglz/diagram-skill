@@ -3,6 +3,7 @@ import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, MiniMap, V
 import { ArrowDown, ArrowDownToLine, ArrowRight, Check, CheckCheck, ChevronRight, Clock3, FileJson, GitBranch, History, LayoutGrid, LevelMapIcon, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Trash2, Undo2, X, AlertCircle, Pause, Image, FileText, Search, PanelLeft, Keyboard, Minus, BookOpen, NODE_ICONS, AmbientLight, ArrowUp, GroupSelection, MoveUp, LoopIcon, Reverse, Import, IconContext, UI_ICON_STYLE } from './icons';
 import { BrandMark } from './BrandMark';
 import { TaskSidebar } from './TaskSidebar';
+import { InspectorPanel } from './InspectorPanel';
 import { LayoutGroup, MotionConfig, motion } from 'motion/react';
 import { ContentTransition, SelectionIndicator, UI_TRANSITION } from './ui/Motion';
 import { NodeDock } from './ui/reactbits/NodeDock';
@@ -688,7 +689,7 @@ function Workspace() {
           {!!ws.busy && <div className="busy-overlay" role="status"><span><Loader2 className="spin" size={18} />{ws.busy}</span></div>}
         </div>
 
-        {panelOpen && !!ws.task && <motion.aside initial={reducedMotion ? false : { x: 10, opacity: 0.85 }} animate={{ x: 0, opacity: 1 }} transition={reducedMotion ? { duration: 0 } : UI_TRANSITION} ref={inspectorRef} id="workspace-inspector" className="inspector" tabIndex={-1} aria-label="流程详情面板">
+        {panelOpen && !!ws.task && <InspectorPanel narrow={narrow} initial={reducedMotion ? false : { x: 10, opacity: 0.85 }} animate={{ x: 0, opacity: 1 }} transition={reducedMotion ? { duration: 0 } : UI_TRANSITION} ref={inspectorRef} id="workspace-inspector" className="inspector" tabIndex={-1} aria-label="流程详情面板">
           <div className="inspector-tabs" aria-label="详情视图"><button aria-pressed={panel === 'details'} className={panel === 'details' ? 'active' : ''} onClick={() => setPanel('details')}><FileText size={18} />{selectedEdge ? '连线详情' : selectedNode ? '节点详情' : selectedNodeId || levelId ? `${GROUP_KIND_LABELS[groupsOf(displayGraph).find(g => g.id === (selectedNodeId || levelId))?.kind || 'subflow']}详情` : '流程说明'}{panel === 'details' && <SelectionIndicator id="inspector-tab" className="tab-indicator" />}</button><button aria-pressed={panel === 'history'} className={panel === 'history' ? 'active' : ''} onClick={() => setPanel('history')}><History size={14} />版本历史{panel === 'history' && <SelectionIndicator id="inspector-tab" className="tab-indicator" />}</button><button className="icon-button inspector-close" aria-label="关闭详情面板" onClick={() => setPanelOpen(false)}><X size={15} /></button></div>
           <div ref={inspectorContent} className="inspector-content">
             <ContentTransition identity={[ws.task?.id, panel, selectedNodeId, selectedEdgeId, historical?.id].join(':')}>
@@ -726,7 +727,7 @@ function Workspace() {
             </>}
             </ContentTransition>
           </div>
-        </motion.aside>}
+        </InspectorPanel>}
       </div>
 
       {!!ws.task && <footer className="review-bar">
