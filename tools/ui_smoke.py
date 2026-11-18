@@ -100,6 +100,28 @@ def main():
                 browser('fill', '[aria-label="搜索流程"]', task_title[:2])
                 assert evaluate('document.querySelectorAll(".task-item").length') == 1
 
+            with case('resize, collapse and restore task navigation'):
+                width = 'document.querySelector(".sidebar").offsetWidth'
+                initial = evaluate(width)
+                browser('mouse', 'move', str(initial), '320')
+                browser('mouse', 'down')
+                browser('mouse', 'move', str(initial + 80), '320')
+                browser('mouse', 'up')
+                assert evaluate(width) == initial + 80
+                browser('focus', '.sidebar-splitter')
+                browser('press', 'ArrowLeft')
+                assert evaluate(width) == initial + 64
+                click('收起任务导航')
+                assert evaluate(width) == 0
+                browser('reload')
+                wait_for('document.querySelector(".sidebar")?.hidden')
+                click('展开任务导航')
+                assert evaluate(width) == initial + 64
+                click('收起任务导航')
+                evaluate('window.dispatchEvent(new KeyboardEvent("keydown", {key:"k", ctrlKey:true}))')
+                wait_for('document.activeElement?.getAttribute("aria-label") === "搜索流程"')
+                assert evaluate(width) == initial + 64
+
             with case('document reading, semantic overview and viewport continuity'):
                 assert evaluate('!!document.querySelector(".graph-reader .markdown")')
                 assert not evaluate('!!document.querySelector("#graph-title")')

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSPrope
 import { ReactFlow, ReactFlowProvider, Background, BackgroundVariant, MiniMap, ViewportPortal, useReactFlow, useViewport, getViewportForBounds, type Connection, type NodeChange, type EdgeChange } from '@xyflow/react';
 import { ArrowDown, ArrowDownToLine, ArrowRight, Check, CheckCheck, ChevronRight, Clock3, FileJson, GitBranch, History, LayoutGrid, LevelMapIcon, Loader2, Maximize, MessageSquare, MousePointer2, PanelRightClose, PanelRightOpen, Plus, Redo2, RotateCcw, Save, ShieldCheck, Sparkles, Trash2, Undo2, X, AlertCircle, Pause, Image, FileText, Search, PanelLeft, Keyboard, Minus, BookOpen, NODE_ICONS, AmbientLight, ArrowUp, GroupSelection, MoveUp, LoopIcon, Reverse, Import, IconContext, UI_ICON_STYLE } from './icons';
 import { BrandMark } from './BrandMark';
+import { TaskSidebar } from './TaskSidebar';
 import { LayoutGroup, MotionConfig, motion } from 'motion/react';
 import { ContentTransition, SelectionIndicator, UI_TRANSITION } from './ui/Motion';
 import { NodeDock } from './ui/reactbits/NodeDock';
@@ -17,7 +18,7 @@ import { createRootScene, createScene, nodePorts } from './geometry';
 import { connectingEdge, createLoop, freeSpot, insertOnEdge, loopRoute, reverseEdge, setRoles, STEP_GAP } from './authoring';
 import { addNodeAtLevel, createEmptySubflow, createGroup, dissolveGroup, groupEndpoint, groupingBlock, groupPath, levelOf, moveIntoGroup, moveToParentLevel } from './groups';
 import { closestOutlinePoint, containsRounded, outlineAnchor, projectAnchor, type Point } from './anchors';
-import { LevelMap } from './LevelMap';
+import { LevelMap } from './LevelMapPanel';
 import { levelChain, levelMap } from './levelMap';
 import { NodeInspector } from './NodeInspector';
 import { Dialog } from './Dialog';
@@ -49,6 +50,12 @@ function Workspace() {
   const [panel, setPanel] = useState<'details' | 'history'>('details');
   const [panelOpen, setPanelOpen] = useState(() => window.innerWidth > 1100);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('flowplan:sidebar-collapsed') === 'true'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('flowplan:sidebar-collapsed', String(sidebarCollapsed)); } catch { /* Optional preference. */ }
+  }, [sidebarCollapsed]);
   const [taskSearch, setTaskSearch] = useState('');
   const searchRef = useRef<HTMLInputElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -484,7 +491,13 @@ function Workspace() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (dialog) return;
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSidebarOpen(true); searchRef.current?.focus(); return; }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        if (narrow) setSidebarOpen(true);
+        else setSidebarCollapsed(false);
+        requestAnimationFrame(() => searchRef.current?.focus());
+        return;
+      }
       if ((event.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) { if (event.key === 'Escape') (event.target as HTMLElement).blur(); return; }
       if (event.key === 'Escape') {
         if (narrow && levelMapOpen) { setLevelMapOpen(false); return; }
@@ -534,6 +547,7 @@ function Workspace() {
 
   const filteredTasks = ws.tasks.filter(task => (task.title || '未命名流程').toLocaleLowerCase().includes(taskSearch.trim().toLocaleLowerCase()));
 
+  const navToggleLabel = narrow ? '打开任务导航' : sidebarCollapsed ? '展开任务导航' : '收起任务导航';
   const ambientControl = <button type="button" className={`icon-button ambient-toggle ${!displayGraph.nodes.length ? 'ambient-toggle-empty' : ''}`}
     aria-label={reducedMotion ? '背景动效已关闭' : ambientEnabled ? '暂停背景动效' : '开启背景动效'}
     title={reducedMotion ? '系统已减少动态效果' : ambientEnabled ? '暂停背景动效' : '开启背景动效'}
@@ -542,8 +556,8 @@ function Workspace() {
 
   return <div className={`app-shell ${panelOpen ? '' : 'inspector-hidden'} ${sidebarOpen ? 'sidebar-open' : ''}`} data-status={ws.task?.status || 'empty'} data-revision={ws.task?.revision || 0} data-dirty={ws.dirty} data-busy={!!ws.busy} data-reduced-motion={!!reducedMotion}>
     {sidebarOpen && narrow && <button className="sidebar-backdrop" aria-label="关闭任务导航" onClick={() => setSidebarOpen(false)} />}
-    <aside ref={sidebarRef} className="sidebar" aria-label="工作区导航" role={sidebarOpen && narrow ? 'dialog' : undefined} aria-modal={sidebarOpen && narrow ? true : undefined} inert={narrow && !sidebarOpen}>
-      <div className="brand-row"><a className="brand" href="#" onClick={event => event.preventDefault()} aria-label="Flowplan"><span className="brand-mark"><BrandMark /></span><span>Flowplan</span></a><button className="icon-button mobile-only" aria-label="收起任务导航" onClick={() => setSidebarOpen(false)}><X size={18} /></button></div>
+    <TaskSidebar ref={sidebarRef} id="task-navigation" narrow={narrow} collapsed={sidebarCollapsed} aria-label="工作区导航" role={sidebarOpen && narrow ? 'dialog' : undefined} aria-modal={sidebarOpen && narrow ? true : undefined} inert={narrow && !sidebarOpen}>
+      <div className="brand-row"><a className="brand" href="#" onClick={event => event.preventDefault()} aria-label="Flowplan"><span className="brand-mark"><BrandMark /></span><span>Flowplan</span></a>{narrow && <button className="icon-button mobile-only" aria-label="收起任务导航" onClick={() => setSidebarOpen(false)}><X size={18} /></button>}</div>
       <label className="task-search"><Search size={15} /><input ref={searchRef} aria-label="搜索流程" placeholder="搜索流程…" value={taskSearch} onChange={event => setTaskSearch(event.target.value)} /><kbd>⌘ K</kbd></label>
       <button className="new-task-button" onClick={() => { setNewTitle(''); setImportError(''); setSidebarOpen(false); setDialog('new'); }} disabled={!!ws.busy || ws.conflict}><Plus size={16} />新建流程</button>
       <div className="sidebar-section-label"><span>流程</span><span className="task-count">{ws.tasks.length}</span></div>
@@ -556,11 +570,11 @@ function Workspace() {
         {ws.initialized && !ws.tasks.length && !taskSearch && <p className="sidebar-empty">暂无流程</p>}
       </nav>
       <div className="sidebar-bottom"><button className="sidebar-help" onClick={() => { setSidebarOpen(false); setDialog('shortcuts'); }}><Keyboard size={16} /><span>快捷键</span><kbd>?</kbd></button></div>
-    </aside>
+    </TaskSidebar>
 
     <main className="workspace" inert={narrow && sidebarOpen}>
       <header className="workspace-header">
-        <button className="icon-button mobile-only" aria-label="打开任务导航" aria-expanded={sidebarOpen} onClick={() => setSidebarOpen(true)}><PanelLeft size={19} /></button>
+        <button className="icon-button" title={navToggleLabel} aria-label={navToggleLabel} aria-controls="task-navigation" aria-expanded={narrow ? sidebarOpen : !sidebarCollapsed} onClick={() => narrow ? setSidebarOpen(true) : setSidebarCollapsed(value => !value)}><PanelLeft size={20} /></button>
         <div className="workspace-title"><h1 title={displayGraph.title}>{displayGraph.title || '开始你的下一份计划'}</h1></div>
         <div className="header-actions">
           {ws.task && <span className={`status-pill status-${ws.task.status}`}><span />{STATUS_LABELS[ws.task.status]}</span>}

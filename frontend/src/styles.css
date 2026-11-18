@@ -30,7 +30,12 @@ kbd { font-size: var(--text-small); line-height: 22px; min-width: 24px; padding:
 
 /* Navigation is intentionally quieter than the document surface. */
 .app-shell { display: flex; height: 100dvh; min-height: 0; overflow: hidden; }
-.sidebar { flex: 0 0 232px; width: 232px; display: flex; flex-direction: column; padding: 0 12px 14px; border-right: 1px solid var(--line); background: var(--nav); color: var(--nav-ink); z-index: 15; min-height: 0; }
+.sidebar { position: relative; flex: none; display: flex; flex-direction: column; padding: 0 12px 14px; border-right: 1px solid var(--line); background: var(--nav); color: var(--nav-ink); z-index: 15; min-height: 0; }
+.sidebar[hidden] { display: none; }
+.sidebar-splitter { position: absolute; inset: 0 -7px 0 auto; width: 14px; cursor: col-resize; touch-action: none; user-select: none; }
+.sidebar-splitter::after { content: ''; position: absolute; inset: 0 6px; background: transparent; }
+.sidebar-splitter:is(:hover, :active, :focus-visible)::after { background: var(--accent); }
+.sidebar-splitter:focus-visible { outline: none; }
 .brand-row { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; height: 72px; margin: 0 -12px 16px; padding: 0 22px; border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 10px; font-size: var(--text-title); font-weight: var(--weight-semibold); letter-spacing: -.4px; color: var(--ink); }
 .brand-mark { display: block; width: 26px; height: 26px; flex-shrink: 0; }
@@ -459,7 +464,7 @@ button.outline-toggle:hover { color: var(--ink); background: var(--soft-surface)
 .group-dissolve { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); }
 .group-dissolve .field-hint { margin-top: 6px; }
 
-@media (max-width: 1280px) { .sidebar { flex-basis: 212px; width: 212px; }.workspace-header { padding-inline: 20px; }.inspector { flex-basis: 336px; width: 336px; }.header-actions { gap: 8px; }.review-bar { padding-inline: 20px; }.checkpoint-button { display: none; } }
+@media (max-width: 1280px) { .workspace-header { padding-inline: 20px; }.inspector { flex-basis: 336px; width: 336px; }.header-actions { gap: 8px; }.review-bar { padding-inline: 20px; }.checkpoint-button { display: none; } }
 @media (max-width: 1100px) { .inspector { position: absolute; right: 0; top: 0; bottom: 0; width: 380px; box-shadow: -8px 0 30px #1e315019; }.header-separator { display: none; }.review-status span { max-width: 160px; }.inspector-tabs { background: var(--paper); } }
 @media (max-width: 760px) {
   .mobile-only { display: inline-flex !important; }
